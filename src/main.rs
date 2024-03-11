@@ -143,9 +143,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let rows = run_nccl_test(
                         &mpi_hostfile,
                         &nccl_test_executable,
+                        "8", // 8xA100 GPUs per node
                         "1", 
-                        "1", 
-                        "1", 
+                        "1",      // 1 GPU per MPI process
                         "2", 
                         "512M", 
                         "2", 

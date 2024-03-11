@@ -1,5 +1,5 @@
 use std::io::BufRead;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use regex::Regex;
 use polars::prelude::*;
@@ -29,6 +29,7 @@ fn verify_env() -> Result<(), Box<dyn std::error::Error>> {
     let mpi_home = PathBuf::from(std::env::var("MPI_HOME").expect("[ERROR] MPI_HOME not set!"));
     let nccl_tests_home = PathBuf::from(std::env::var("NCCL_TESTS_HOME").expect("[ERROR] NCCL_TESTS_HOME not set!"));
     let _ = PathBuf::from(std::env::var("EXPERIMENTS_OUTPUT_DIR").expect("[ERROR] EXPERIMENTS_OUTPUT_DIR not set!"));
+    let mpi_hostfile = PathBuf::from(std::env::var("MPI_HOSTFILE").expect("[ERROR] MPI_HOSTFILE not set!"));
     if !nccl_home.exists() {
         panic!("[ERROR] NCCL_HOME not found at: {}", nccl_home.to_str().unwrap());
     }
@@ -45,6 +46,9 @@ fn verify_env() -> Result<(), Box<dyn std::error::Error>> {
     // if !experiments_output.exists() {
     //     panic!("[ERROR] EXPERIMENTS_OUTPUT_DIR not found at: {}", experiments_output.to_str().unwrap());
     // }
+    if !mpi_hostfile.exists() {
+        panic!("[ERROR] MPI_HOSTFILE not found at: {}", mpi_hostfile.to_str().unwrap());
+    }
 
     let nccl_lib = nccl_home.join("lib");
     let cuda_lib = cuda_home.join("lib64");
@@ -79,6 +83,12 @@ fn verify_env() -> Result<(), Box<dyn std::error::Error>> {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Verify environment variables
     verify_env()?;
+
+    // MPI hostfile
+    let mpi_hostfile = PathBuf::from(std::env::var("MPI_HOSTFILE").unwrap());
+    if !mpi_hostfile.exists() {
+        panic!("[ERROR] MPI_HOSTFILE not found at: {}", mpi_hostfile.to_str().unwrap());
+    }
 
     // Output data directory
     let experiments_output_dir = PathBuf::from(std::env::var("EXPERIMENTS_OUTPUT_DIR").unwrap());
@@ -131,6 +141,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 for i in 0..num_repetitions {
                     println!("Running of collective {} (Op: {}) with data type: {}, ({} of {})", collective_exe, reduction_op, data_type, i + 1, num_repetitions);
                     let rows = run_nccl_test(
+                        &mpi_hostfile,
                         &nccl_test_executable,
                         "1", 
                         "1", 
@@ -303,12 +314,13 @@ fn parse_line(line: &str) -> Result<Option<Row>, Box<dyn std::error::Error>> {
 }
 
 /// Run NCCL tests with MPI using a set of parameters
-fn run_nccl_test(executable: &PathBuf, proc_per_node: &str, num_threads: &str, num_gpus: &str, min_bytes: &str, max_bytes: &str, 
+fn run_nccl_test(hostfile_path: &Path, executable: &Path, proc_per_node: &str, num_threads: &str, num_gpus: &str, min_bytes: &str, max_bytes: &str, 
     step_factor: &str, op: &str, datatype: &str, root: &str, num_iters: &str, num_warmup_iters: &str, agg_iters: &str,
     average: &str, parallel_init: &str, check: &str, blocking: &str, cuda_graph: &str, nccl_debug_level: &str) -> Result<Vec<Row>, Box<dyn std::error::Error>> {
 
     // Run NCCL tests with MPI
     let mut res = Command::new("mpirun")
+        .args(["--hostfile", hostfile_path.to_str().unwrap()])
         .args(["--map-by", format!("ppr:{}:node", proc_per_node).as_str()])
         .arg(executable.to_str().unwrap())
         .args(["--nthreads", format!("{}", num_threads).as_str()])

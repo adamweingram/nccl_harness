@@ -24,6 +24,7 @@ export MPI_HOME="$(dirname $(dirname $(which mpirun)))"
 export NCCL_TESTS_HOME="/home/ec2-user/deps/msccl-tests/build"
 export EXPERIMENTS_OUTPUT_DIR="/home/ec2-user/experiments_output"
 export LOGS_DIR="/home/ec2-user/logs"
+export MPI_HOSTFILE="/home/ec2-user/hostfile"
 
 # Update Paths
 export PATH="${MPI_HOME}/bin:${CUDA_HOME}/bin:${PATH}"

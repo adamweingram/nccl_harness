@@ -1,0 +1,10 @@
+[package]
+name = "nccl_harness"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+polars = "0.38.2"
+regex = "1.10.3"

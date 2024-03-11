@@ -109,22 +109,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Experimental setup
     let num_repetitions = 2;
     let data_types = [
-        "double", 
+        // "double", 
         "float", 
-        "int32", 
+        // "int32", 
         "int8"
     ];
     let collective_exes = [
         "all_reduce_perf", 
-        "all_gather_perf", 
-        "alltoall_perf", 
-        "broadcast_perf", 
-        "gather_perf", 
+        // "all_gather_perf", 
+        // "alltoall_perf", 
+        // "broadcast_perf", 
+        // "gather_perf", 
         // "hypercube_perf",  // BROKEN FOR HYPERCUBE BECAUSE THE OUTPUT TABLE IS BLANK FOR REDOP (breaks parsing)
-        "reduce_perf", 
-        "reduce_scatter_perf", 
-        "scatter_perf", 
-        "sendrecv_perf"
+        // "reduce_perf", 
+        // "reduce_scatter_perf", 
+        // "scatter_perf", 
+        // "sendrecv_perf"
     ];
     let reduction_ops = [
         "sum", 
@@ -174,6 +174,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 // Print info about this experiment
                                 println!("Running collective {} (Op: {}) with data type: {}, comm algorithm: {}, MSCCL channel: {}, MSCCL chunk: {} ({} of {})", 
                                     collective_exe, reduction_op, data_type, comm_algorithm, msccl_channel, msccl_chunk, i + 1, num_repetitions);
+
+                                // Handle non-created XMLs
+                                // FIXME: Ugly hack
+                                if collective_exe == "all_reduce_perf" && 
+                                    comm_algorithm == "ring" &&
+                                    (msccl_chunk != "1" || 
+                                     msccl_channel != "2" || 
+                                     msccl_channel != "4" ||
+                                     msccl_channel != "8")
+                                     {
+                                    println!("[INFO] Skipping ring algorithm for all_reduce_perf because it is not supported by Liuyao's generated XML! (Chunk was {}, Channel was {})", 
+                                        msccl_chunk, 
+                                        msccl_channel);
+
+                                    // Skip this iteration and therefore experiment
+                                    continue;
+                                }
 
                                 // Find name of the collective algorithm (different from the binary)
                                 let algo_name = match collective_exe {

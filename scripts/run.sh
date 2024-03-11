@@ -26,6 +26,8 @@ export CUDA_PATH="/opt/nvidia/hpc_sdk/Linux_x86_64/21.9/cuda"
 export NCCL_HOME="/home/Adam/Projects/NCCL-Harness/nccl-experiments/nccl/build"
 # export MPI_HOME="/home/Adam/Software/spack/opt/spack/linux-almalinux8-icelake/gcc-8.5.0/openmpi-4.1.4-3qxzgu5b6g3yyftfcz2dq7pxjostt4b6"
 export MPI_HOME="$(dirname $(dirname $(which mpirun)))"
+export NCCL_TESTS_HOME="/home/Adam/Projects/NCCL-Harness/nccl-experiments/nccl-tests/build"
+export EXPERIMENTS_OUTPUT_DIR="/home/Adam/Projects/NCCL-Harness/nccl-experiments/nccl_harness/experiments_output"
 
 # Update Paths
 export PATH="${MPI_HOME}/bin:${CUDA_HOME}/bin:${PATH}"
@@ -33,7 +35,7 @@ export LD_LIBRARY_PATH="${NCCL_HOME}/lib:${MPI_HOME}/lib:${MPI_HOME}/lib64:${CUD
 
 # Run experiments
 cargo build --release
-./target/release/nccl_harness
+./target/release/nccl_harness | tee "logs/nccl_harness.log"
 
 # mpirun \
 #     -host node01,node02 \

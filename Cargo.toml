@@ -6,5 +6,5 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-polars = "0.38.2"
+polars = { version = "0.38.2", features = ["polars-io"] }
 regex = "1.10.3"

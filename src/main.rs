@@ -211,7 +211,11 @@ fn parse_line(line: &str) -> Result<Option<Row>, Box<dyn std::error::Error>> {
                 }
             },
             dtype: line_slice[2].to_string(),
-            redop: line_slice[3].to_string(),
+            redop: match line_slice[3].to_string().is_empty() {
+                true => "N/A".to_string(),
+                false => line_slice[3].to_string()
+            
+            },
             root: match line_slice[4].parse::<i64>() {
                 Ok(v) => v,
                 Err(e) => {

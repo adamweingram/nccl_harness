@@ -151,7 +151,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "binomial_tree",
         "recursive_doubling",
         "recursive_doubling_halving",
-        "ring"
+        "ring",
+        "triple_trinomial_tree"
     ];
 
     let nccl_debug_level = "INFO";  // Use `TRACE` for replayable trace information on every call
@@ -170,7 +171,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     for msccl_channel in msccl_channels {
                         for msccl_chunk in msccl_chunks {
                             for i in 0..num_repetitions {
-                                // Find name of the collective algorithm
+                                // Find name of the collective algorithm (different from the binary)
                                 let algo_name = match collective_exe {
                                     "all_reduce_perf" => "allreduce",
                                     "all_gather_perf" => "allgather",
@@ -197,6 +198,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     println!("[ERROR] XML file not found at: {}", xml_file.to_str().unwrap());
                                     continue;
                                 }
+                                println!("Will attempt to use MSCCL XML file at: {}", xml_file.to_str().unwrap());
 
                                 // Run NCCL test
                                 println!("Running of collective {} (Op: {}) with data type: {}, ({} of {})", collective_exe, reduction_op, data_type, i + 1, num_repetitions);

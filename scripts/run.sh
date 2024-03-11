@@ -32,7 +32,7 @@ export PATH="${MPI_HOME}/bin:${CUDA_HOME}/bin:${PATH}"
 export LD_LIBRARY_PATH="${NCCL_HOME}/lib:${MPI_HOME}/lib:${MPI_HOME}/lib64:${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}"
 
 # Run experiments
-cargo build --release
+mpirun --hostfile ~/hostfile --map-by ppr:1:node cargo build --release
 ./target/release/nccl_harness | tee "${LOGS_DIR}/nccl_harness.log"
 
 # mpirun \

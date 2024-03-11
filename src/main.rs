@@ -91,8 +91,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Experimental setup
     let num_repetitions = 2;
-    let data_types = ["double", "float", "int32", "int8"];
-    let collective_exes = ["all_reduce_perf", "all_gather_perf", "alltoall_perf", "broadcast_perf", "gather_perf", "hypercube_perf", "reduce_perf", "reduce_scatter_perf", "scatter_perf", "sendrecv_perf"];
+    let data_types = [
+        "double", 
+        "float", 
+        "int32", 
+        "int8"
+    ];
+    let collective_exes = [
+        "all_reduce_perf", 
+        "all_gather_perf", 
+        "alltoall_perf", 
+        "broadcast_perf", 
+        "gather_perf", 
+        // "hypercube_perf",  // BROKEN FOR HYPERCUBE BECAUSE THE OUTPUT TABLE IS BLANK FOR REDOP (breaks parsing)
+        "reduce_perf", 
+        "reduce_scatter_perf", 
+        "scatter_perf", 
+        "sendrecv_perf"
+    ];
+    let reduction_ops = [
+        "sum", 
+        // "prod", 
+        // "min", 
+        // "max",
+        // "avg"
+    ];
     let nccl_debug_level = "INFO";  // Use `TRACE` for replayable trace information on every call
 
     // Run experiments
@@ -104,43 +127,45 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Run experiments across all variations
         for data_type in data_types {
-            for i in 0..num_repetitions {
-                println!("Running of collective {} with data type: {}, ({} of {})", collective_exe, data_type, i + 1, num_repetitions);
-                let rows = run_nccl_test(
-                    &nccl_test_executable,
-                    "1", 
-                    "1", 
-                    "1", 
-                    "2", 
-                    "512M", 
-                    "2", 
-                    "sum", 
-                    data_type, 
-                    "0", 
-                    "20", 
-                    "5", 
-                    "1", 
-                    "1", 
-                    "0", 
-                    "1", 
-                    "0", 
-                    "0",
-                    nccl_debug_level).unwrap();
+            for reduction_op in reduction_ops {
+                for i in 0..num_repetitions {
+                    println!("Running of collective {} (Op: {}) with data type: {}, ({} of {})", collective_exe, reduction_op, data_type, i + 1, num_repetitions);
+                    let rows = run_nccl_test(
+                        &nccl_test_executable,
+                        "1", 
+                        "1", 
+                        "1", 
+                        "2", 
+                        "512M", 
+                        "2", 
+                        reduction_op, 
+                        data_type, 
+                        "0", 
+                        "20", 
+                        "5", 
+                        "1", 
+                        "1", 
+                        "0", 
+                        "1", 
+                        "0", 
+                        "0",
+                        nccl_debug_level).unwrap();
 
-                // Convert rows to DataFrame
-                let mut df = rows_to_df(rows).unwrap();
-                println!("DataFrame: {:?}", df);
+                    // Convert rows to DataFrame
+                    let mut df = rows_to_df(rows).unwrap();
+                    println!("DataFrame: {:?}", df);
 
-                // Write to CSV
-                let csv_file = experiments_output_dir.as_path().join(format!("{}_{}_{}.csv", collective_exe, data_type, i));
-                println!("Writing results to CSV at {}...", csv_file.to_str().unwrap());
-                let opened_file = std::fs::File::create(&csv_file)?;
-                CsvWriter::new(opened_file)
-                    .finish(&mut df)?;
-                println!("Wrote results to CSV at {}.", csv_file.to_str().unwrap());
+                    // Write to CSV
+                    let csv_file = experiments_output_dir.as_path().join(format!("{}_{}_{}_{}.csv", collective_exe, reduction_op, data_type, i));
+                    println!("Writing results to CSV at {}...", csv_file.to_str().unwrap());
+                    let opened_file = std::fs::File::create(&csv_file)?;
+                    CsvWriter::new(opened_file)
+                        .finish(&mut df)?;
+                    println!("Wrote results to CSV at {}.", csv_file.to_str().unwrap());
 
-                // Print line separator
-                println!("---------------------------------");
+                    // Print line separator
+                    println!("---------------------------------");
+                }
             }
         }
     }

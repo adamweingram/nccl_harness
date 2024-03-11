@@ -171,6 +171,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     for msccl_channel in msccl_channels {
                         for msccl_chunk in msccl_chunks {
                             for i in 0..num_repetitions {
+                                // Print info about this experiment
+                                println!("Running collective {} (Op: {}) with data type: {}, comm algorithm: {}, MSCCL channel: {}, MSCCL chunk: {} ({} of {})", 
+                                    collective_exe, reduction_op, data_type, comm_algorithm, msccl_channel, msccl_chunk, i + 1, num_repetitions);
+
                                 // Find name of the collective algorithm (different from the binary)
                                 let algo_name = match collective_exe {
                                     "all_reduce_perf" => "allreduce",

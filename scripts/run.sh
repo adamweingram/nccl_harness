@@ -15,15 +15,13 @@ set -e
 nvidia-smi topo -m
 
 # Set variables
-export CUDA_HOME="/home/ec2-user/deps/cuda"
-export CUDA_PATH="/home/ec2-user/deps/cuda"
-# export NCCL_HOME="/home/ec2-user/deps/nccl/build"
+export CUDA_HOME="/usr/local/cuda"
+export CUDA_PATH="/usr/local/cuda"
 export NCCL_HOME="/home/ec2-user/deps/msccl/build"
 export MPI_HOME="$(dirname $(dirname $(which mpirun)))"
-# export NCCL_TESTS_HOME="/home/Adam/Projects/NCCL-Harness/nccl-experiments/nccl-tests/build"
 export NCCL_TESTS_HOME="/home/ec2-user/deps/msccl-tests/build"
 export EXPERIMENTS_OUTPUT_DIR="/home/ec2-user/experiments_output"
-export LOGS_DIR="/home/ec2-user/logs"
+export LOGS_DIR="/home/ec2-user/nccl_harness/logs"
 export MPI_HOSTFILE="/home/ec2-user/hostfile"
 export MSCCL_XMLS="/home/ec2-user/deps/msccl-tools/examples/xml/xml_lyd/aws-test/1nic"
 

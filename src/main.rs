@@ -56,7 +56,7 @@ fn verify_env() -> Result<(), Box<dyn std::error::Error>> {
 
     let nccl_lib = nccl_home.join("lib");
     let cuda_lib = cuda_home.join("lib64");
-    let mpi_lib = mpi_home.join("lib");
+    let mpi_lib = mpi_home.join("lib64");
     if !nccl_lib.exists() {
         panic!("[ERROR] NCCL lib not found at: {}", nccl_lib.to_str().unwrap());
     }

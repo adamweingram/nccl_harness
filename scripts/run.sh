@@ -11,23 +11,19 @@
 # Set up script
 set -e
 
-# Load Deps
-module load cuda
-spack load gcc@10.4.0%gcc@8.5.0 arch=linux-almalinux8-icelake
-# spack load openmpi
-module load mpich-4.0.2-gcc-8.5.0-atqvq3l
-
 # Print info
 nvidia-smi topo -m
 
 # Set variables
-export CUDA_HOME="/opt/nvidia/hpc_sdk/Linux_x86_64/21.9/cuda"
-export CUDA_PATH="/opt/nvidia/hpc_sdk/Linux_x86_64/21.9/cuda"
-export NCCL_HOME="/home/Adam/Projects/NCCL-Harness/nccl-experiments/nccl/build"
-# export MPI_HOME="/home/Adam/Software/spack/opt/spack/linux-almalinux8-icelake/gcc-8.5.0/openmpi-4.1.4-3qxzgu5b6g3yyftfcz2dq7pxjostt4b6"
+export CUDA_HOME="/home/ec2-user/deps/cuda"
+export CUDA_PATH="/home/ec2-user/deps/cuda"
+# export NCCL_HOME="/home/ec2-user/deps/nccl/build"
+export NCCL_HOME="/home/ec2-user/deps/msccl/build"
 export MPI_HOME="$(dirname $(dirname $(which mpirun)))"
-export NCCL_TESTS_HOME="/home/Adam/Projects/NCCL-Harness/nccl-experiments/nccl-tests/build"
-export EXPERIMENTS_OUTPUT_DIR="/home/Adam/Projects/NCCL-Harness/nccl-experiments/nccl_harness/experiments_output"
+# export NCCL_TESTS_HOME="/home/Adam/Projects/NCCL-Harness/nccl-experiments/nccl-tests/build"
+export NCCL_TESTS_HOME="/home/ec2-user/deps/msccl-tests/build"
+export EXPERIMENTS_OUTPUT_DIR="/home/ec2-user/experiments_output"
+export LOGS_DIR="/home/ec2-user/logs"
 
 # Update Paths
 export PATH="${MPI_HOME}/bin:${CUDA_HOME}/bin:${PATH}"
@@ -35,7 +31,7 @@ export LD_LIBRARY_PATH="${NCCL_HOME}/lib:${MPI_HOME}/lib:${MPI_HOME}/lib64:${CUD
 
 # Run experiments
 cargo build --release
-./target/release/nccl_harness | tee "logs/nccl_harness.log"
+./target/release/nccl_harness | tee "${LOGS_DIR}/nccl_harness.log"
 
 # mpirun \
 #     -host node01,node02 \

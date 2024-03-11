@@ -30,6 +30,7 @@ fn verify_env() -> Result<(), Box<dyn std::error::Error>> {
     let nccl_tests_home = PathBuf::from(std::env::var("NCCL_TESTS_HOME").expect("[ERROR] NCCL_TESTS_HOME not set!"));
     let _ = PathBuf::from(std::env::var("EXPERIMENTS_OUTPUT_DIR").expect("[ERROR] EXPERIMENTS_OUTPUT_DIR not set!"));
     let mpi_hostfile = PathBuf::from(std::env::var("MPI_HOSTFILE").expect("[ERROR] MPI_HOSTFILE not set!"));
+    let msccl_xmls = PathBuf::from(std::env::var("MSCCL_XMLS").expect("[ERROR] MSCCL_XMLS not set!"));
     if !nccl_home.exists() {
         panic!("[ERROR] NCCL_HOME not found at: {}", nccl_home.to_str().unwrap());
     }
@@ -48,6 +49,9 @@ fn verify_env() -> Result<(), Box<dyn std::error::Error>> {
     // }
     if !mpi_hostfile.exists() {
         panic!("[ERROR] MPI_HOSTFILE not found at: {}", mpi_hostfile.to_str().unwrap());
+    }
+    if !msccl_xmls.exists() {
+        panic!("[ERROR] MSCCL_XMLS not found at: {}", msccl_xmls.to_str().unwrap());
     }
 
     let nccl_lib = nccl_home.join("lib");
@@ -99,6 +103,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // NCCL tests executable binary location
     let nccl_test_bins = PathBuf::from(std::env::var("NCCL_TESTS_HOME").unwrap());
 
+    // MSCCL XML files location
+    let msccl_xmls_directory = PathBuf::from(std::env::var("MSCCL_XMLS").unwrap());
+
     // Experimental setup
     let num_repetitions = 2;
     let data_types = [
@@ -126,6 +133,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // "max",
         // "avg"
     ];
+    let msccl_channels = [
+        "1",
+        "2"
+    ];
+    let msccl_chunks = [
+        "1",
+        "2",
+        "4",
+        "8",
+        "16",
+        "32",
+        "64"
+    ];
+    let comm_algorithms = [
+        "binary_tree",
+        "binomial_tree",
+        "recursive_doubling",
+        "recursive_doubling_halving",
+        "ring"
+    ];
+
     let nccl_debug_level = "INFO";  // Use `TRACE` for replayable trace information on every call
 
     // Run experiments
@@ -138,44 +166,80 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Run experiments across all variations
         for data_type in data_types {
             for reduction_op in reduction_ops {
-                for i in 0..num_repetitions {
-                    println!("Running of collective {} (Op: {}) with data type: {}, ({} of {})", collective_exe, reduction_op, data_type, i + 1, num_repetitions);
-                    let rows = run_nccl_test(
-                        &mpi_hostfile,
-                        &nccl_test_executable,
-                        "8", // 8xA100 GPUs per node
-                        "1", 
-                        "1",      // 1 GPU per MPI process
-                        "2", 
-                        "512M", 
-                        "2", 
-                        reduction_op, 
-                        data_type, 
-                        "0", 
-                        "20", 
-                        "5", 
-                        "1", 
-                        "1", 
-                        "0", 
-                        "1", 
-                        "0", 
-                        "0",
-                        nccl_debug_level).unwrap();
+                for comm_algorithm in comm_algorithms {
+                    for msccl_channel in msccl_channels {
+                        for msccl_chunk in msccl_chunks {
+                            for i in 0..num_repetitions {
+                                // Find name of the collective algorithm
+                                let algo_name = match collective_exe {
+                                    "all_reduce_perf" => "allreduce",
+                                    "all_gather_perf" => "allgather",
+                                    "alltoall_perf" => "alltoall",
+                                    "broadcast_perf" => "broadcast",
+                                    "gather_perf" => "gather",
+                                    "hypercube_perf" => "hypercube",
+                                    "reduce_perf" => "reduce",
+                                    "reduce_scatter_perf" => "reducescatter",
+                                    "scatter_perf" => "scatter",
+                                    "sendrecv_perf" => "sendrecv",
+                                    _ => panic!("[ERROR] Unknown collective algorithm: {}", collective_exe)
+                                };
 
-                    // Convert rows to DataFrame
-                    let mut df = rows_to_df(rows).unwrap();
-                    println!("DataFrame: {:?}", df);
+                                // Select correct XML file
+                                let xml_file = msccl_xmls_directory.join(format!(
+                                    "{}_{}_{}ch_{}chunk.xml", 
+                                    algo_name, 
+                                    comm_algorithm,
+                                    msccl_channel,
+                                    msccl_chunk));
+                                
+                                if !xml_file.exists() {
+                                    println!("[ERROR] XML file not found at: {}", xml_file.to_str().unwrap());
+                                    continue;
+                                }
 
-                    // Write to CSV
-                    let csv_file = experiments_output_dir.as_path().join(format!("{}_{}_{}_{}.csv", collective_exe, reduction_op, data_type, i));
-                    println!("Writing results to CSV at {}...", csv_file.to_str().unwrap());
-                    let opened_file = std::fs::File::create(&csv_file)?;
-                    CsvWriter::new(opened_file)
-                        .finish(&mut df)?;
-                    println!("Wrote results to CSV at {}.", csv_file.to_str().unwrap());
+                                // Run NCCL test
+                                println!("Running of collective {} (Op: {}) with data type: {}, ({} of {})", collective_exe, reduction_op, data_type, i + 1, num_repetitions);
+                                let rows = run_nccl_test(
+                                    &mpi_hostfile,
+                                    &nccl_test_executable,
+                                    &xml_file,
+                                    "8", // 8xA100 GPUs per node
+                                    "1", 
+                                    "1",      // 1 GPU per MPI process
+                                    "2", 
+                                    "512M", 
+                                    "2", 
+                                    reduction_op, 
+                                    data_type, 
+                                    "0", 
+                                    "20", 
+                                    "5", 
+                                    "1", 
+                                    "1", 
+                                    "0", 
+                                    "1", 
+                                    "0", 
+                                    "0",
+                                    nccl_debug_level).unwrap();
 
-                    // Print line separator
-                    println!("---------------------------------");
+                                // Convert rows to DataFrame
+                                let mut df = rows_to_df(rows).unwrap();
+                                println!("DataFrame: {:?}", df);
+
+                                // Write to CSV
+                                let csv_file = experiments_output_dir.as_path().join(format!("{}_{}_{}_{}.csv", collective_exe, reduction_op, data_type, i));
+                                println!("Writing results to CSV at {}...", csv_file.to_str().unwrap());
+                                let opened_file = std::fs::File::create(&csv_file)?;
+                                CsvWriter::new(opened_file)
+                                    .finish(&mut df)?;
+                                println!("Wrote results to CSV at {}.", csv_file.to_str().unwrap());
+
+                                // Print line separator
+                                println!("---------------------------------");
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -314,11 +378,13 @@ fn parse_line(line: &str) -> Result<Option<Row>, Box<dyn std::error::Error>> {
 }
 
 /// Run NCCL tests with MPI using a set of parameters
-fn run_nccl_test(hostfile_path: &Path, executable: &Path, proc_per_node: &str, num_threads: &str, num_gpus: &str, min_bytes: &str, max_bytes: &str, 
-    step_factor: &str, op: &str, datatype: &str, root: &str, num_iters: &str, num_warmup_iters: &str, agg_iters: &str,
-    average: &str, parallel_init: &str, check: &str, blocking: &str, cuda_graph: &str, nccl_debug_level: &str) -> Result<Vec<Row>, Box<dyn std::error::Error>> {
+fn run_nccl_test(hostfile_path: &Path, executable: &Path, msccl_xml_file: &Path, proc_per_node: &str, num_threads: &str, 
+    num_gpus: &str, min_bytes: &str, max_bytes: &str, step_factor: &str, op: &str, datatype: &str, root: &str, 
+    num_iters: &str, num_warmup_iters: &str, agg_iters: &str, average: &str, parallel_init: &str, check: &str, blocking: &str, 
+    cuda_graph: &str, nccl_debug_level: &str) -> Result<Vec<Row>, Box<dyn std::error::Error>> {
 
     // Run NCCL tests with MPI
+    // TODO: Verify that OpenMPI passes through required environment variables
     let mut res = Command::new("mpirun")
         .args(["--hostfile", hostfile_path.to_str().unwrap()])
         .args(["--map-by", format!("ppr:{}:node", proc_per_node).as_str()])
@@ -340,6 +406,7 @@ fn run_nccl_test(hostfile_path: &Path, executable: &Path, proc_per_node: &str, n
         .args(["--blocking", blocking])
         .args(["--cudagraph", cuda_graph])
         .env("NCCL_DEBUG", nccl_debug_level)
+        .env("MSCCL_XML_FILES", msccl_xml_file.to_str().unwrap())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()

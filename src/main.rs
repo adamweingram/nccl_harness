@@ -408,6 +408,7 @@ fn run_nccl_test(hostfile_path: &Path, executable: &Path, msccl_xml_file: &Path,
 
     // Run NCCL tests with MPI
     // TODO: Verify that OpenMPI passes through required environment variables
+    println!("Running NCCL tests with MPI...");
     let mut res = Command::new("mpirun")
         .args(["--hostfile", hostfile_path.to_str().unwrap()])
         .args(["--map-by", format!("ppr:{}:node", proc_per_node).as_str()])
@@ -430,6 +431,7 @@ fn run_nccl_test(hostfile_path: &Path, executable: &Path, msccl_xml_file: &Path,
         .args(["--cudagraph", cuda_graph])
         .env("NCCL_DEBUG", nccl_debug_level)
         .env("MSCCL_XML_FILES", msccl_xml_file.to_str().unwrap())
+        .env("FI_EFA_FORK_SAFE", "1")  // Necessary or OFI NCCL plugin crashes
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()

@@ -135,7 +135,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
     let msccl_channels = [
         "1",
-        "2"
+        // "2" // Probably broken because of single NIC
     ];
     let msccl_chunks = [
         "1",
@@ -436,6 +436,9 @@ fn run_nccl_test(hostfile_path: &Path, executable: &Path, msccl_xml_file: &Path,
         .stderr(std::process::Stdio::piped())
         .spawn()
         .expect("Failed to run with MPI.");
+
+    // Handle exit status
+    let status = res.wait()?;
 
     // Create vector to store rows
     let mut rows = Vec::new();

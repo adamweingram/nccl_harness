@@ -175,16 +175,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 println!("Running collective {} (Op: {}) with data type: {}, comm algorithm: {}, MSCCL channel: {}, MSCCL chunk: {} ({} of {})", 
                                     collective_exe, reduction_op, data_type, comm_algorithm, msccl_channel, msccl_chunk, i + 1, num_repetitions);
 
-                                // Handle non-created XMLs
+                                // Skip experiments we lack XMLs for
                                 // FIXME: Ugly hack
-                                if collective_exe == "all_reduce_perf" && 
-                                    comm_algorithm == "ring" &&
-                                    (msccl_chunk != "1" || 
-                                     msccl_channel != "2" || 
-                                     msccl_channel != "4" ||
-                                     msccl_channel != "8")
-                                     {
-                                    println!("[INFO] Skipping ring algorithm for all_reduce_perf because it is not supported by Liuyao's generated XML! (Chunk was {}, Channel was {})", 
+                                if comm_algorithm == "ring" &&
+                                    (collective_exe != "all_reduce_perf" ||
+                                     msccl_chunk != "1" || 
+                                     (msccl_channel != "2" && msccl_channel != "4" && msccl_channel != "8")) {
+                                    println!("[INFO] Skipping {} algorithm because it is not supported by Liuyao's generated XML! (Algo: {}, Chunk was {}, Channel was {})", 
+                                        comm_algorithm,
+                                        collective_exe,
                                         msccl_chunk, 
                                         msccl_channel);
 
@@ -193,6 +192,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 }
 
                                 // Find name of the collective algorithm (different from the binary)
+                                // Note: Necessary because Ly's XML naming scheme is different
                                 let algo_name = match collective_exe {
                                     "all_reduce_perf" => "allreduce",
                                     "all_gather_perf" => "allgather",
@@ -223,28 +223,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                                 // Run NCCL test
                                 println!("Running of collective {} (Op: {}) with data type: {}, ({} of {})", collective_exe, reduction_op, data_type, i + 1, num_repetitions);
-                                let rows = run_nccl_test(
+                                let rows = match run_nccl_test(
                                     &mpi_hostfile,
                                     &nccl_test_executable,
-                                    &xml_file,
+                                    Some(&xml_file),
                                     "8", // 8xA100 GPUs per node
                                     "1", 
                                     "1",      // 1 GPU per MPI process
-                                    "2", 
+                                    "512", 
                                     "512M", 
                                     "2", 
                                     reduction_op, 
                                     data_type, 
-                                    "0", 
                                     "20", 
                                     "5", 
-                                    "1", 
-                                    "1", 
-                                    "0", 
-                                    "1", 
-                                    "0", 
-                                    "0",
-                                    nccl_debug_level).unwrap();
+                                    nccl_debug_level) {
+                                        Ok(v) => v,
+                                        Err(e) => {
+                                            println!("[ERROR] Error running NCCL test: {}", e);
+
+                                            // Continue to next experiments
+                                            continue;
+                                        }
+                                    };
 
                                 // Convert rows to DataFrame
                                 let mut df = rows_to_df(rows).unwrap();
@@ -316,7 +317,6 @@ fn parse_line(line: &str) -> Result<Option<Row>, Box<dyn std::error::Error>> {
         // println!("Data Slice: {:?}", line_slice);
         
         // Create row
-        // TODO: Handle parse errors
         let row = Row {
             size: match line_slice[0].parse::<u64>() {
                 Ok(v) => v,
@@ -401,10 +401,28 @@ fn parse_line(line: &str) -> Result<Option<Row>, Box<dyn std::error::Error>> {
 }
 
 /// Run NCCL tests with MPI using a set of parameters
-fn run_nccl_test(hostfile_path: &Path, executable: &Path, msccl_xml_file: &Path, proc_per_node: &str, num_threads: &str, 
-    num_gpus: &str, min_bytes: &str, max_bytes: &str, step_factor: &str, op: &str, datatype: &str, root: &str, 
-    num_iters: &str, num_warmup_iters: &str, agg_iters: &str, average: &str, parallel_init: &str, check: &str, blocking: &str, 
-    cuda_graph: &str, nccl_debug_level: &str) -> Result<Vec<Row>, Box<dyn std::error::Error>> {
+fn run_nccl_test(hostfile_path: &Path, executable: &Path, msccl_xml_file: Option<&Path>,
+    proc_per_node: &str, num_threads: &str, num_gpus: &str, min_bytes: &str, max_bytes: &str, step_factor: &str, 
+    op: &str, datatype: &str, num_iters: &str, num_warmup_iters: &str, nccl_debug_level: &str) 
+    -> Result<Vec<Row>, Box<dyn std::error::Error>> {
+
+    // MSCCL XML file handling (just use dummy envvar if not given an XML file)
+    let msccl_xml_envvar = match msccl_xml_file {
+        Some(p) => {
+            println!("Using MSCCL XML file at: {}", p.to_str().unwrap());
+            format!("MSCCL_XML_FILES={}", p.to_str().unwrap())
+        },
+        None => {
+            println!("[INFO] No MSCCL XML file was given, so using dummy envvar.");
+            "DUMMY_VAR=TRUE".to_string()
+        }
+    };
+
+    // Other MSCCL envvar
+    let gen_msccl_xml = match msccl_xml_file {
+        Some(_) => "GENMSCCLXML=1".to_string(),
+        None => "GDUMMY_VAR=TRUE".to_string()
+    };
 
     // Run NCCL tests with MPI
     // TODO: Verify that OpenMPI passes through required environment variables
@@ -412,6 +430,14 @@ fn run_nccl_test(hostfile_path: &Path, executable: &Path, msccl_xml_file: &Path,
     let mut res = Command::new("mpirun")
         .args(["--hostfile", hostfile_path.to_str().unwrap()])
         .args(["--map-by", format!("ppr:{}:node", proc_per_node).as_str()])
+        .args(["-x", format!("LD_LIBRARY_PATH=/opt/aws-ofi-nccl/lib:/opt/amazon/openmpi/lib64:/home/ec2-user/deps/msccl/build/lib:/usr/local/cuda/lib64:{}", std::env::var("LD_LIBRARY_PATH").unwrap().as_str()).as_str()])
+        // .args(["-x", "MSCCL_XML_FILES=/home/ec2-user/deps/msccl-tools/examples/xml/xml_lyd/aws-test/1nic/allreduce_binary_tree_1ch_64chunk.xml"])
+        .args(["-x", msccl_xml_envvar.as_str()])
+        .args(["-x", gen_msccl_xml.as_str()])
+        .args(["-x", format!("NCCL_DEBUG={}", nccl_debug_level).as_str()])
+        .args(["-x", "FI_EFA_FORK_SAFE=1"])
+        .args(["--mca", "btl", "tcp,self", "--mca", "btl_tcp_if_exclude", "lo,docker0", "--bind-to", "none"])
+        // .args(["/home/ec2-user/deps/nccl-tests-base/build/all_reduce_perf"])
         .arg(executable.to_str().unwrap())
         .args(["--nthreads", format!("{}", num_threads).as_str()])
         .args(["--ngpus", num_gpus])
@@ -420,33 +446,20 @@ fn run_nccl_test(hostfile_path: &Path, executable: &Path, msccl_xml_file: &Path,
         .args(["--stepfactor", step_factor])
         .args(["--op", op])
         .args(["--datatype", datatype])
-        .args(["--root", root])
         .args(["--iters", num_iters])
         .args(["--warmup_iters", num_warmup_iters])
-        .args(["--agg_iters", agg_iters])
-        .args(["--average", average])
-        .args(["--parallel_init", parallel_init])
-        .args(["--check", check])
-        .args(["--blocking", blocking])
-        .args(["--cudagraph", cuda_graph])
-        .env("NCCL_DEBUG", nccl_debug_level)
-        .env("MSCCL_XML_FILES", msccl_xml_file.to_str().unwrap())
-        .env("FI_EFA_FORK_SAFE", "1")  // Necessary or OFI NCCL plugin crashes
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
-        .expect("Failed to run with MPI.");
-
-    // Handle exit status
-    let status = res.wait()?;
+        .expect("FAILED TO RUN WITH MPI!!!!");
 
     // Create vector to store rows
     let mut rows = Vec::new();
 
-    // Print output
-    let reader = std::io::BufReader::new(res.stdout.take().unwrap());
+    // Print and handle stdout
+    let stdout_reader = std::io::BufReader::new(res.stdout.take().unwrap());
     // let reader = std::io::BufReader::new(res.stdout.take().unwrap().as_fd());
-    for line in reader.lines() {
+    for line in stdout_reader.lines() {
         match line {
             Ok(line) => {
                 // Parse line, get row if this is a table data row
@@ -461,8 +474,32 @@ fn run_nccl_test(hostfile_path: &Path, executable: &Path, msccl_xml_file: &Path,
                 }
             },
             Err(e) => {
-                println!("Error: {}", e);
+                println!("Error parsing line: {}", e);
             }
+        }
+    }
+
+    // Print stderr
+    // FIXME: Won't actually print if there's a hang-related error! The stdout reader never finishes reading!
+    let stderr_reader = std::io::BufReader::new(res.stderr.take().unwrap());
+    for line in stderr_reader.lines() {
+        match line {
+            Ok(line) => {
+                println!("[E]: {}", line);
+            },
+            Err(e) => {
+                println!("[ERROR] Error getting line from stdout: {}", e);
+            }
+        }
+    }
+
+    // Handle exit status
+    let status = res.wait()?;
+    match status.success() {
+        true => println!("NCCL tests with MPI ran successfully."),
+        false => {
+            println!("NCCL tests with MPI failed with exit code: {}", status.code().unwrap());
+            return Err("NCCL tests with MPI failed.".into());
         }
     }
 

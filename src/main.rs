@@ -223,7 +223,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     comm_algorithm,
                                     msccl_channel,
                                     msccl_chunk,
-                                    "_8gpus"
+                                    ""  // Use `_8gpus` when using that specific configuration. Otherwise remove.
                                 ));
                                 
                                 if !xml_file.exists() {

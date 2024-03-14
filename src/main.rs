@@ -94,6 +94,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         panic!("[ERROR] MPI_HOSTFILE not found at: {}", mpi_hostfile.to_str().unwrap());
     }
 
+    // GPUs per Node
+    let gpus_per_node = match std::env::var("GPUS_PER_NODE") {
+        Ok(v) => v,
+        Err(_) => {
+            panic!("[ERROR] GPUS_PER_NODE not set!");
+        }
+    };
+
     // Output data directory
     let experiments_output_dir = PathBuf::from(std::env::var("EXPERIMENTS_OUTPUT_DIR").unwrap());
     if !experiments_output_dir.exists() {
@@ -230,7 +238,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     &mpi_hostfile,
                                     &nccl_test_executable,
                                     Some(&xml_file),
-                                    "8", // 8xA100 GPUs per node
+                                    gpus_per_node.as_str(), // 8xA100 GPUs per node
                                     "1", 
                                     "1",      // 1 GPU per MPI process
                                     "512", 

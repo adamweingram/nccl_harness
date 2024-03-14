@@ -25,7 +25,7 @@ export EXPERIMENTS_OUTPUT_DIR="/home/ec2-user/experiments_output"
 export LOGS_DIR="/home/ec2-user/nccl_harness/logs"
 export MPI_HOSTFILE="/home/ec2-user/hostfile"
 export MSCCL_XMLS="/home/ec2-user/deps/msccl-tools-lyd/examples/xml/xml_lyd/aws-test/1nic"
-export GPUS_PER_NODE="4"
+export GPUS_PER_NODE="8"
 
 # Update Paths
 export PATH="${MPI_HOME}/bin:${CUDA_HOME}/bin:${PATH}"

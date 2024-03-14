@@ -20,11 +20,11 @@ export CUDA_PATH="/usr/local/cuda"
 export NCCL_HOME="/home/ec2-user/deps/msccl/build"
 export MPI_HOME="$(dirname $(dirname $(which mpirun)))"
 export NCCL_PLUGIN_LIBS="/opt/aws-ofi-nccl/lib"
-export NCCL_TESTS_HOME="/home/ec2-user/deps/msccl-tests/build"
+export NCCL_TESTS_HOME="/home/ec2-user/deps/nccl-tests-lyd/build"
 export EXPERIMENTS_OUTPUT_DIR="/home/ec2-user/experiments_output"
 export LOGS_DIR="/home/ec2-user/nccl_harness/logs"
 export MPI_HOSTFILE="/home/ec2-user/hostfile"
-export MSCCL_XMLS="/home/ec2-user/deps/msccl-tools/examples/xml/xml_lyd/aws-test/1nic"
+export MSCCL_XMLS="/home/ec2-user/deps/msccl-tools-lyd/examples/xml/xml_lyd/aws-test/1nic"
 export GPUS_PER_NODE="4"
 
 # Update Paths

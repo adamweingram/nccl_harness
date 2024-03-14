@@ -267,7 +267,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 // Write to CSV
                                 // Order: data_type, reduction_op, comm_algorithm, msccl_channel, msccl_chunk, i
                                 let csv_file = experiments_output_dir.as_path().join(format!(
-                                    "{}_{}_{}_{}_{}_{}_{}.csv", collective_exe, reduction_op, data_type, comm_algorithm, msccl_channel, msccl_chunk, i
+                                    "{}_{}_{}_{}_mcl{}_mck{}_i{}.csv", collective_exe, reduction_op, data_type, comm_algorithm, msccl_channel, msccl_chunk, i
                                 ));
                                 // let csv_file = experiments_output_dir.as_path().join(format!(
                                 //     "{}_{}_{}_{}.csv", collective_exe, reduction_op, data_type, i

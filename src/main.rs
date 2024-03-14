@@ -265,7 +265,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 println!("DataFrame: {:?}", df);
 
                                 // Write to CSV
-                                let csv_file = experiments_output_dir.as_path().join(format!("{}_{}_{}_{}.csv", collective_exe, reduction_op, data_type, i));
+                                // Order: data_type, reduction_op, comm_algorithm, msccl_channel, msccl_chunk, i
+                                let csv_file = experiments_output_dir.as_path().join(format!(
+                                    "{}_{}_{}_{}_{}_{}_{}.csv", collective_exe, reduction_op, data_type, comm_algorithm, msccl_channel, msccl_chunk, i
+                                ));
+                                // let csv_file = experiments_output_dir.as_path().join(format!(
+                                //     "{}_{}_{}_{}.csv", collective_exe, reduction_op, data_type, i
+                                // ));
                                 println!("Writing results to CSV at {}...", csv_file.to_str().unwrap());
                                 let opened_file = std::fs::File::create(&csv_file)?;
                                 CsvWriter::new(opened_file)

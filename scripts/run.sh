@@ -31,6 +31,9 @@ export GPUS_PER_NODE="8"
 export PATH="${MPI_HOME}/bin:${CUDA_HOME}/bin:${PATH}"
 export LD_LIBRARY_PATH="${NCCL_PLUGIN_LIBS}:${NCCL_HOME}/lib:${MPI_HOME}/lib64:${MPI_HOME}/lib64:${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}"
 
+# Create logs directory
+mkdir -p "${LOGS_DIR}"
+
 # Run experiments
 # mpirun --hostfile ~/hostfile --map-by ppr:1:node cargo build --release  # NOT NECESSARY BECAUSE RUNS ON ONE NODE
 cargo build --release

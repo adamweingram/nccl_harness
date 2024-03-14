@@ -24,7 +24,7 @@ export NCCL_TESTS_HOME="/home/ec2-user/deps/nccl-tests-lyd/build"
 export EXPERIMENTS_OUTPUT_DIR="/home/ec2-user/experiments_output"
 export LOGS_DIR="/home/ec2-user/nccl_harness/logs"
 export MPI_HOSTFILE="/home/ec2-user/hostfile"
-export MSCCL_XMLS="/home/ec2-user/deps/msccl-tools-lyd/examples/xml/xml_lyd/aws-test/1nic"
+export MSCCL_XMLS="/home/ec2-user/deps/msccl-tools-lyd/examples/xml/xml_lyd/aws-test/1nic/16gpus"
 export GPUS_PER_NODE="8"
 
 # Update Paths

@@ -248,7 +248,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     data_type, 
                                     "20", 
                                     "5", 
-                                    nccl_debug_level) {
+                                    nccl_debug_level,
+                                    true  // Why? Well, Liuyao's tests techincally return a nonzero status code
+                                ) {
                                         Ok(v) => v,
                                         Err(e) => {
                                             println!("[ERROR] Error running NCCL test: {}", e);
@@ -414,7 +416,7 @@ fn parse_line(line: &str) -> Result<Option<Row>, Box<dyn std::error::Error>> {
 /// Run NCCL tests with MPI using a set of parameters
 fn run_nccl_test(hostfile_path: &Path, executable: &Path, msccl_xml_file: Option<&Path>,
     proc_per_node: &str, num_threads: &str, num_gpus: &str, min_bytes: &str, max_bytes: &str, step_factor: &str, 
-    op: &str, datatype: &str, num_iters: &str, num_warmup_iters: &str, nccl_debug_level: &str) -> Result<Vec<Row>, Box<dyn std::error::Error>> {
+    op: &str, datatype: &str, num_iters: &str, num_warmup_iters: &str, nccl_debug_level: &str, ignore_error_status_codes: bool) -> Result<Vec<Row>, Box<dyn std::error::Error>> {
 
     // // Open output files
     // let stdout_file = match stdout_output.exists() {
@@ -537,8 +539,13 @@ fn run_nccl_test(hostfile_path: &Path, executable: &Path, msccl_xml_file: Option
     match status.success() {
         true => println!("NCCL tests with MPI ran successfully."),
         false => {
-            println!("NCCL tests with MPI failed with exit code: {}", status.code().unwrap());
-            return Err("NCCL tests with MPI failed.".into());
+            if !ignore_error_status_codes {
+                println!("NCCL tests with MPI failed with exit code: {}", status.code().unwrap());
+                return Err("NCCL tests with MPI failed.".into());
+            } else {
+                println!("NCCL tests with MPI failed with exit code: {}, but ignoring and continuing.", 
+                    status.code().unwrap());
+            }
         }
     }
 

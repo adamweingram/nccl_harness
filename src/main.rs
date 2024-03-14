@@ -223,42 +223,75 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     comm_algorithm,
                                     msccl_channel,
                                     msccl_chunk,
-                                    ""  // Use `_8gpus` when using that specific configuration. Otherwise remove.
+                                    "_16gpus"  // Use `_8gpus` when using that specific configuration. Otherwise remove.
                                 ));
                                 
                                 if !xml_file.exists() {
-                                    println!("[ERROR] XML file not found at: {}", xml_file.to_str().unwrap());
+                                    println!("[ERROR] XML file not found at: {}. Skipping to next experiment.", xml_file.to_str().unwrap());
                                     continue;
                                 }
                                 println!("Will attempt to use MSCCL XML file at: {}", xml_file.to_str().unwrap());
 
                                 // Run NCCL test
                                 println!("Running of collective {} (Op: {}) with data type: {}, ({} of {})", collective_exe, reduction_op, data_type, i + 1, num_repetitions);
-                                let rows = match run_nccl_test(
-                                    &mpi_hostfile,
-                                    &nccl_test_executable,
-                                    Some(&xml_file),
-                                    gpus_per_node.as_str(), // 8xA100 GPUs per node
-                                    "1", 
-                                    "1",      // 1 GPU per MPI process
-                                    "512", 
-                                    "512M", 
-                                    "2", 
-                                    reduction_op, 
-                                    data_type, 
-                                    "20", 
-                                    "5", 
-                                    nccl_debug_level,
-                                    true  // Why? Well, Liuyao's tests techincally return a nonzero status code
-                                ) {
-                                        Ok(v) => v,
-                                        Err(e) => {
-                                            println!("[ERROR] Error running NCCL test: {}", e);
+                                let rows;
+                                if comm_algorithm != "triple_trinomial_tree" {
+                                    rows = match run_nccl_test(
+                                        &mpi_hostfile,
+                                        &nccl_test_executable,
+                                        Some(&xml_file),
+                                        gpus_per_node.as_str(), // 8xA100 GPUs per node
+                                        "1", 
+                                        "1",      // 1 GPU per MPI process
+                                        "512", 
+                                        "512M", 
+                                        "2", 
+                                        reduction_op, 
+                                        data_type, 
+                                        "20", 
+                                        "5", 
+                                        nccl_debug_level,
+                                        true  // Why? Well, Liuyao's tests techincally return a nonzero status code
+                                    ) {
+                                            Ok(v) => v,
+                                            Err(e) => {
+                                                println!("[ERROR] Error running NCCL test: {}", e);
 
-                                            // Continue to next experiments
-                                            continue;
-                                        }
-                                    };
+                                                // Continue to next experiments
+                                                continue;
+                                            }
+                                        };
+                                } 
+                                
+                                // Handle special case for `triple_trinomial_tree` algorithm (requested by Liuyao)
+                                else {
+                                    println!("[INFO] Running special version of test for `triple_trinomial_tree` it is not supported by Liuyao's generated XML!");
+                                    rows = match run_nccl_test(
+                                        &mpi_hostfile,
+                                        &nccl_test_executable,
+                                        Some(&xml_file),
+                                        gpus_per_node.as_str(), // 8xA100 GPUs per node
+                                        "1", 
+                                        "1",      // 1 GPU per MPI process
+                                        "768K",  // SPECIAL CASE
+                                        "384M",  // SPECIAL CASE
+                                        "2", 
+                                        reduction_op, 
+                                        data_type, 
+                                        "20", 
+                                        "5", 
+                                        nccl_debug_level,
+                                        true  // Why? Well, Liuyao's tests techincally return a nonzero status code
+                                    ) {
+                                            Ok(v) => v,
+                                            Err(e) => {
+                                                println!("[ERROR] Error running NCCL test: {}", e);
+
+                                                // Continue to next experiments
+                                                continue;
+                                            }
+                                        };
+                                }
 
                                 // Convert rows to DataFrame
                                 let mut df = rows_to_df(rows).unwrap();

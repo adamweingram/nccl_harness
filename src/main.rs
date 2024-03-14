@@ -1,4 +1,4 @@
-use std::io::BufRead;
+use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use regex::Regex;
@@ -208,12 +208,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 };
 
                                 // Select correct XML file
+                                // NOTE: REMOVE THE POSTFIX FROM THE FILE NAME WHEN NOT USING 8 GPUs!
                                 let xml_file = msccl_xmls_directory.join(format!(
-                                    "{}_{}_{}ch_{}chunk.xml", 
+                                    "{}_{}_{}ch_{}chunk{}.xml", 
                                     algo_name, 
                                     comm_algorithm,
                                     msccl_channel,
-                                    msccl_chunk));
+                                    msccl_chunk,
+                                    "_8gpus"
+                                ));
                                 
                                 if !xml_file.exists() {
                                     println!("[ERROR] XML file not found at: {}", xml_file.to_str().unwrap());
@@ -403,8 +406,19 @@ fn parse_line(line: &str) -> Result<Option<Row>, Box<dyn std::error::Error>> {
 /// Run NCCL tests with MPI using a set of parameters
 fn run_nccl_test(hostfile_path: &Path, executable: &Path, msccl_xml_file: Option<&Path>,
     proc_per_node: &str, num_threads: &str, num_gpus: &str, min_bytes: &str, max_bytes: &str, step_factor: &str, 
-    op: &str, datatype: &str, num_iters: &str, num_warmup_iters: &str, nccl_debug_level: &str) 
-    -> Result<Vec<Row>, Box<dyn std::error::Error>> {
+    op: &str, datatype: &str, num_iters: &str, num_warmup_iters: &str, nccl_debug_level: &str) -> Result<Vec<Row>, Box<dyn std::error::Error>> {
+
+    // // Open output files
+    // let stdout_file = match stdout_output.exists() {
+    //     true => std::fs::OpenOptions::new().append(true).open(stdout_output)?,
+    //     false => std::fs::File::create(stdout_output)?
+    // };
+    // let stderr_file = match stderr_output.exists() {
+    //     true => std::fs::OpenOptions::new().append(true).open(stderr_output)?,
+    //     false => std::fs::File::create(stderr_output)?
+    // };
+    // let mut stdout_writer = std::io::BufWriter::new(stdout_file);
+    // let mut stderr_writer = std::io::BufWriter::new(stderr_file);
 
     // MSCCL XML file handling (just use dummy envvar if not given an XML file)
     let msccl_xml_envvar = match msccl_xml_file {
@@ -456,12 +470,20 @@ fn run_nccl_test(hostfile_path: &Path, executable: &Path, msccl_xml_file: Option
     // Create vector to store rows
     let mut rows = Vec::new();
 
-    // Print and handle stdout
+    // Print and handle stdout line by line
     let stdout_reader = std::io::BufReader::new(res.stdout.take().unwrap());
     // let reader = std::io::BufReader::new(res.stdout.take().unwrap().as_fd());
     for line in stdout_reader.lines() {
         match line {
             Ok(line) => {
+                // // Write line to file
+                // match stdout_writer.write_all(line.as_bytes()) {
+                //     Ok(_) => {},
+                //     Err(e) => {
+                //         println!("[E]: Error writing line to stdout file: {}", e);
+                //     }
+                // }
+
                 // Parse line, get row if this is a table data row
                 if let Some(row) = parse_line(line.as_str()).unwrap() {
                     rows.push(row);
@@ -485,6 +507,15 @@ fn run_nccl_test(hostfile_path: &Path, executable: &Path, msccl_xml_file: Option
     for line in stderr_reader.lines() {
         match line {
             Ok(line) => {
+                // // Write line to file
+                // match stderr_writer.write_all(line.as_bytes()) {
+                //     Ok(_) => {},
+                //     Err(e) => {
+                //         println!("[E]: Error writing line to stdout file: {}", e);
+                //     }
+                // }
+
+                // Print the line
                 println!("[E]: {}", line);
             },
             Err(e) => {

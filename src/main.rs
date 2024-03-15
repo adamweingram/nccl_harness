@@ -494,7 +494,6 @@ fn run_nccl_test(hostfile_path: &Path, executable: &Path, msccl_xml_file: Option
         .args(["-x", gen_msccl_xml.as_str()])
         .args(["-x", format!("NCCL_DEBUG={}", nccl_debug_level).as_str()])
         .args(["-x", "FI_EFA_FORK_SAFE=1"])
-        .args(["-x", "OFI_NCCL_NIC_DUP_CONNS=2"])
         .args(["--mca", "btl", "tcp,self", "--mca", "btl_tcp_if_exclude", "lo,docker0", "--bind-to", "none"])
         .arg(executable.to_str().unwrap())
         .args(["--nthreads", format!("{}", num_threads).as_str()])

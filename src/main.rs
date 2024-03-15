@@ -489,7 +489,7 @@ fn run_nccl_test(hostfile_path: &Path, executable: &Path, msccl_xml_file: Option
     let mut res = Command::new("mpirun")
         .args(["--hostfile", hostfile_path.to_str().unwrap()])
         .args(["--map-by", format!("ppr:{}:node", proc_per_node).as_str()])
-        .args(["-x", format!("LD_LIBRARY_PATH=/opt/aws-ofi-nccl/lib:/opt/amazon/openmpi/lib64:/home/ec2-user/deps/msccl/build/lib:/usr/local/cuda/lib64:{}", std::env::var("LD_LIBRARY_PATH").unwrap().as_str()).as_str()])
+        .args(["-x", format!("LD_LIBRARY_PATH=/opt/aws-ofi-nccl-lyd/lib:/opt/amazon/openmpi/lib64:/home/ec2-user/deps/msccl/build/lib:/usr/local/cuda/lib64:{}", std::env::var("LD_LIBRARY_PATH").unwrap().as_str()).as_str()])
         .args(["-x", msccl_xml_envvar.as_str()])
         .args(["-x", gen_msccl_xml.as_str()])
         .args(["-x", format!("NCCL_DEBUG={}", nccl_debug_level).as_str()])

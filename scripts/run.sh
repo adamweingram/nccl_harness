@@ -11,6 +11,12 @@
 # Set up script
 set -e -u -o pipefail
 
+echo "#################################################"
+echo "# Environment Variables                         #"
+echo "#################################################"
+printenv
+echo "#################################################"
+
 # Print info
 nvidia-smi topo -m
 

@@ -163,7 +163,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "recursive_doubling",
         "recursive_doubling_halving",
         "ring",
-        "triple_trinomial_tree"
+        "trinomial_tree"
     ];
 
     let nccl_debug_level = "INFO";  // Use `TRACE` for replayable trace information on every call
@@ -191,7 +191,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         "ring" => (vec![1, 2, 4], vec![2, 4, 8]),
                         "double_binary_tree" => (vec![8, 16, 32, 64, 128, 256], vec![1, 2]),
                         "double_binomial_tree" => (vec![8, 16, 32, 64, 128], vec![1, 2]),
-                        "triple_trinomial_tree" => (vec![8, 16, 32, 64, 128], vec![1, 2]),
+                        "trinomial_tree" => (vec![8, 16, 32, 64, 128], vec![1, 2]),
                         "recursive_doubling" => (vec![8, 16, 32], vec![1, 2]),
                         _ => panic!("[ERROR] Unknown comm_algorithm: {}", comm_algorithm)
                     };
@@ -262,9 +262,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             println!("Will attempt to use MSCCL XML file at: {}", xml_file.to_str().unwrap());
 
-            // Handle special case for `triple_trinomial_tree` algorithm (requested by Liuyao)
+            // Handle special case for `trinomial_tree` algorithm (requested by Liuyao)
             let (min_bytes, max_bytes) = match comm_algorithm.as_str() {
-                "triple_trinomial_tree" => ("192K", "768M"),
+                "trinomial_tree" => ("192K", "768M"),
                 _ => ("128K", "512M")
             };
 
@@ -489,6 +489,7 @@ fn run_nccl_test(hostfile_path: &Path, executable: &Path, msccl_xml_file: Option
     let mut res = Command::new("mpirun")
         .args(["--hostfile", hostfile_path.to_str().unwrap()])
         .args(["--map-by", format!("ppr:{}:node", proc_per_node).as_str()])
+        // [HACK] FIXME: This hardcoded LD_LIBRARY_PATH is awful and needs to be removed!
         .args(["-x", format!("LD_LIBRARY_PATH=/opt/aws-ofi-nccl-lyd/lib:/opt/amazon/openmpi/lib64:/home/ec2-user/deps/msccl/build/lib:/usr/local/cuda/lib64:{}", std::env::var("LD_LIBRARY_PATH").unwrap().as_str()).as_str()])
         .args(["-x", msccl_xml_envvar.as_str()])
         .args(["-x", gen_msccl_xml.as_str()])

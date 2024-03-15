@@ -185,6 +185,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     // Handle special cases for different communication algorithms
                     let (msccl_chunks, msccl_channels) = match comm_algorithm {
+                        "binary_tree" => (vec![8, 16, 32, 64, 128, 256], vec![1, 2]),
                         "recursive_doubling_halving" => (vec![8, 16, 32], vec![1, 2]),
                         "ring" => (vec![1, 2, 4], vec![2, 4, 8]),
                         "double_binary_tree" => (vec![8, 16, 32, 64, 128, 256], vec![1, 2]),

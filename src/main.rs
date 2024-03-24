@@ -3,585 +3,576 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use regex::Regex;
 use polars::prelude::*;
+use log::{debug, info, warn, error};
 
-/// Struct to describe a table row from the NCCL output
-#[derive(Debug, Clone)]
-struct Row {
-    size: u64,
-    count: u64,
-    dtype: String,
-    redop: String,
-    root: i64,
-    oop_time: f64,
-    oop_alg_bw: f64,
-    oop_bus_bw: f64,
-    oop_num_wrong: String,  // Sometimes is N/A, so can't use u64
-    ip_time: f64,
-    ip_alg_bw: f64,
-    ip_bus_bw: f64,
-    ip_num_wrong: String    // Sometimes is N/A, so can't use u64
-}
+mod util;
+use util::{Row, Permutation, MscclExperimentParams, params_to_xml, verify_env, pretty_print_configs};
 
-#[derive(Debug, Clone)]
-struct Permuation {
-    collective_exe: String,
-    data_type: String,
-    reduction_op: String,
-    comm_algorithm: String,
-    msccl_channel: Option<String>,
-    msccl_chunk: Option<String>,
-}
+mod parse;
+use parse::{rows_to_df, parse_line};
 
-fn verify_env() -> Result<(), Box<dyn std::error::Error>> {
-    // Verify environment variables are set and paths are accessible
-    let nccl_home = PathBuf::from(std::env::var("NCCL_HOME").expect("[ERROR] NCCL_HOME not set!"));
-    let cuda_home = PathBuf::from(std::env::var("CUDA_HOME").expect("[ERROR] CUDA_HOME not set!"));
-    let mpi_home = PathBuf::from(std::env::var("MPI_HOME").expect("[ERROR] MPI_HOME not set!"));
-    let nccl_tests_home = PathBuf::from(std::env::var("NCCL_TESTS_HOME").expect("[ERROR] NCCL_TESTS_HOME not set!"));
-    let _ = PathBuf::from(std::env::var("EXPERIMENTS_OUTPUT_DIR").expect("[ERROR] EXPERIMENTS_OUTPUT_DIR not set!"));
-    let mpi_hostfile = PathBuf::from(std::env::var("MPI_HOSTFILE").expect("[ERROR] MPI_HOSTFILE not set!"));
-    let msccl_xmls = PathBuf::from(std::env::var("MSCCL_XMLS").expect("[ERROR] MSCCL_XMLS not set!"));
-    if !nccl_home.exists() {
-        panic!("[ERROR] NCCL_HOME not found at: {}", nccl_home.to_str().unwrap());
-    }
-    if !cuda_home.exists() {
-        panic!("[ERROR] CUDA_HOME not found at: {}", cuda_home.to_str().unwrap());
-    }
-    if !mpi_home.exists() {
-        panic!("[ERROR] MPI_HOME not found at: {}", mpi_home.to_str().unwrap());
-    }
-    if !nccl_tests_home.exists() {
-        panic!("[ERROR] NCCL_TESTS_HOME not found at: {}", nccl_tests_home.to_str().unwrap());
-    }
-    // // Note: We don't need this to be created as it will be created if it doesn't exist
-    // if !experiments_output.exists() {
-    //     panic!("[ERROR] EXPERIMENTS_OUTPUT_DIR not found at: {}", experiments_output.to_str().unwrap());
-    // }
-    if !mpi_hostfile.exists() {
-        panic!("[ERROR] MPI_HOSTFILE not found at: {}", mpi_hostfile.to_str().unwrap());
-    }
-    if !msccl_xmls.exists() {
-        panic!("[ERROR] MSCCL_XMLS not found at: {}", msccl_xmls.to_str().unwrap());
-    }
-
-    let nccl_lib = nccl_home.join("lib");
-    let cuda_lib = cuda_home.join("lib64");
-    let mpi_lib = mpi_home.join("lib64");
-    if !nccl_lib.exists() {
-        panic!("[ERROR] NCCL lib not found at: {}", nccl_lib.to_str().unwrap());
-    }
-    if !cuda_lib.exists() {
-        panic!("[ERROR] CUDA lib not found at: {}", cuda_lib.to_str().unwrap());
-    }
-    if !mpi_lib.exists() {
-        panic!("[ERROR] MPI lib not found at: {}", mpi_lib.to_str().unwrap());
-    }
-
-    // let path = std::env::var("PATH").unwrap();
-    let ld_library_path = std::env::var("LD_LIBRARY_PATH").unwrap();
-
-    // Verify that the necessary libraries are in the LD_LIBRARY_PATH
-    for lib in [nccl_lib, cuda_lib, mpi_lib].iter() {
-        if !ld_library_path.contains(lib.to_str().unwrap()) {
-            panic!("[ERROR] {} not in LD_LIBRARY_PATH!", lib.to_str().unwrap())
-        }
-
-        if !ld_library_path.contains(lib.to_str().unwrap()) {
-            panic!("[ERROR] {} not in LD_LIBRARY_PATH!", lib.to_str().unwrap())
-        }
-    }
-
-    Ok(())
-}
+mod wrapper;
+use wrapper::run_msccl_tests;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Verify environment variables
-    verify_env()?;
+    // Initialize logger
+    env_logger::init();
 
-    // Set custom environment variables (to customize the experiments to the hardware)
-    // TODO: Implement this!
-    // let custom_envvars = [
-    //     ("NCCL_SOCKET_IFNAME", "eth0"),
-    // ];
-
-    // MPI hostfile
-    let mpi_hostfile = PathBuf::from(std::env::var("MPI_HOSTFILE").unwrap());
-    if !mpi_hostfile.exists() {
-        panic!("[ERROR] MPI_HOSTFILE not found at: {}", mpi_hostfile.to_str().unwrap());
-    }
-
-    // GPUs per Node
-    let gpus_per_node = match std::env::var("GPUS_PER_NODE") {
+    // CUDA Path
+    let cuda_path = match std::env::var("CUDA_HOME") {
         Ok(v) => v,
         Err(_) => {
-            panic!("[ERROR] GPUS_PER_NODE not set!");
+            panic!("[ERROR] CUDA_HOME not set!");
         }
     };
 
-    // Output data directory
-    let experiments_output_dir = PathBuf::from(std::env::var("EXPERIMENTS_OUTPUT_DIR").unwrap());
-    if !experiments_output_dir.exists() {
-        std::fs::create_dir(experiments_output_dir.as_path())?;
-    }
+    // EFA Path
+    let efa_path = match std::env::var("EFA_PATH") {
+        Ok(v) => Some(v),
+        Err(_) => {
+            warn!("EFA_PATH was not set! You will not be able to run tests that use the EFA!");
+            None
+        }
+    };
+
+    // AWS OFI NCCL Path
+    let aws_ofi_nccl_path = match std::env::var("AWS_OFI_NCCL_PATH") {
+        Ok(v) => Some(v),
+        Err(_) => {
+            warn!("AWS_OFI_NCCL_PATH was not set! You will not be able to run tests that use the EFA!");
+            None
+        }
+    };
+
+    // OpenMPI Path
+    let openmpi_path = match std::env::var("OPENMPI_PATH") {
+        Ok(v) => v,
+        Err(_) => {
+            panic!("[ERROR] Envvar OPENMPI_PATH not set!");
+        }
+    };
+
+    // MSCCL Path
+    let msccl_path = match std::env::var("MSCCL_PATH") {
+        Ok(v) => v,
+        Err(_) => {
+            panic!("[ERROR] Envvar MSCCL_PATH not set!");
+        }
+    };
 
     // NCCL tests executable binary location
-    let nccl_test_bins = PathBuf::from(std::env::var("NCCL_TESTS_HOME").unwrap());
+    let nccl_test_bins = match std::env::var("NCCL_TESTS_HOME") {
+        Ok(v) => PathBuf::from(v),
+        Err(_) => {
+            panic!("[ERROR] Envvar NCCL_TESTS_HOME not set!");
+        }
+    };
 
     // MSCCL XML files location
-    let msccl_xmls_directory = PathBuf::from(std::env::var("MSCCL_XMLS").unwrap());
+    let msccl_xmls_directory = match std::env::var("MSCCL_XMLS") {
+        Ok(v) => PathBuf::from(v),
+        Err(_) => {
+            panic!("[ERROR] Envvar MSCCL_XMLS not set!");
+        }
+    };
+
+    // MPI hostfile
+    let mpi_hostfile_path = PathBuf::from(std::env::var("MPI_HOSTFILE").unwrap());
+
+    #[cfg(not(feature = "no_check_paths"))]
+    if !mpi_hostfile_path.exists() {
+        panic!(
+            "[ERROR] Envvar MPI_HOSTFILE not found at: {}",
+            mpi_hostfile_path.to_str().unwrap()
+        );
+    }
+
+    // Number of Nodes
+    let num_nodes = match std::env::var("NUM_NODES") {
+        Ok(v) => v.parse::<u64>().unwrap(),
+        Err(_) => {
+            panic!("[ERROR] Envvar NUM_NODES not set!");
+        }
+    };
+
+    // GPUs per Node
+    let gpus_per_node = match std::env::var("GPUS_PER_NODE") {
+        Ok(v) => v.parse::<u64>().unwrap(),
+        Err(_) => {
+            panic!("[ERROR] Envvar GPUS_PER_NODE not set!");
+        }
+    };
+
+    // Experiments Output Directory
+    let experiments_output_dir = match std::env::var("EXPERIMENTS_OUTPUT_DIR") {
+        Ok(v) => {
+            let path = PathBuf::from(v);
+
+            // Verify that the directory exists. Otherwise, create it
+            #[cfg(not(feature = "no_check_paths"))]
+            if !path.exists() {
+                std::fs::create_dir(path.as_path())?;
+            }
+
+            path
+        }
+        Err(_) => {
+            panic!("[ERROR] Envvar EXPERIMENTS_OUTPUT_DIR not set!");
+        }
+    };
+
+    // Check if doing a dry run
+    let dry_run = match std::env::var("DRY_RUN") {
+        Ok(v) => {
+            if v.to_lowercase() == "true" || v.to_lowercase() == "1" {
+                info!("🌵🌵🌵 PERFORMING DRY RUN!!!! 🌵🌵🌵");
+                true
+            } else {
+                false
+            }
+        }
+        Err(_) => false
+    };
 
     // Experimental setup
+    // Independent Variables:
+    // • Collective Algorithm (e.g., all_reduce_perf, all_gather_perf, alltoall_perf, broadcast_perf, gather_perf, hypercube_perf, reduce_perf, reduce_scatter_perf, scatter_perf, sendrecv_perf)
+    // • Operation (e.g., sum, prod, min, max, avg)
+    // • Data Type (e.g., double, float, int32, int8)
+    // • Communication Algorithm (e.g., binary_tree, binomial_tree, recursive_doubling, recursive_doubling_halving, ring, trinomial_tree)
+    // • Number of MSCCL Channels (e.g., 1, 2, 4, 8)
+    // • MSCCL Chunk Size (e.g., 8, 16, 32, 64, 128, 256)
+    // • Number of GPUs (count, e.g., 1, 2, 4, 8, 16, 32, 64, 128, 256)
+    // • Buffer Size (scaling factor, e.g., 1, 2, 4)
+    // • Message Size (bytes, e.g., 64k, 256M)
+
+    // Hardware details
+    let num_gpus = num_nodes * gpus_per_node;
+
+    // Selected
     let num_repetitions = 2;
-    let data_types = [
-        // "double", 
-        "float", 
-        // "int32", 
-        "int8"
-    ];
-    let collective_exes = [
-        "all_reduce_perf", 
-        // "all_gather_perf", 
-        // "alltoall_perf", 
-        // "broadcast_perf", 
-        // "gather_perf", 
-        // "hypercube_perf",  // BROKEN FOR HYPERCUBE BECAUSE THE OUTPUT TABLE IS BLANK FOR REDOP (breaks parsing)
-        // "reduce_perf", 
-        // "reduce_scatter_perf", 
-        // "scatter_perf", 
-        // "sendrecv_perf"
+    let collectives = [
+        "all-reduce",
+        // "all-gather",
+        // "all-to-all",
+        // "broadcast",
+        // "gather",
+        // "hypercube",  // BROKEN FOR HYPERCUBE BECAUSE THE OUTPUT TABLE IS BLANK FOR REDOP (breaks parsing)
+        // "reduce",
+        // "reduce-scatter",
+        // "scatter",
+        // "sendrecv"
     ];
     let reduction_ops = [
-        "sum", 
-        // "prod", 
-        // "min", 
+        "sum",
+        // "prod",
+        // "min",
         // "max",
         // "avg"
     ];
-    let comm_algorithms = [
-        "binary_tree",
-        "binomial_tree",
-        "recursive_doubling",
-        "recursive_doubling_halving",
-        "ring",
-        "trinomial_tree"
+    let data_types = [
+        // "double",
+        "float",
+        // "int32",
+        // "int8",
     ];
+    let comm_algorithms = [
+        "binary-tree",
+        // "binomial-tree",
+        // "recursive-doubling",
+        // "recursive-halving-doubling",
+        "ring",
+        // "trinomial-tree"
+    ];
+    let msccl_potential_channels = [  // NOTE: HANDLED IN THE PERMUTATION GENERATOR BECAUSE THERE ARE SPECIAL CASES!
+        1,
+        2,
+        4,
+    ];
+    let msccl_potential_chunks = [  // NOTE: HANDLED IN THE PERMUTATION GENERATOR BECAUSE THERE ARE SPECIAL CASES!
+        1,
+        4,
+        16,
+        64,
+        256
+    ];
+    let buffer_sizes = [1u64, 2, 4];
+    let message_size_range = ("64K", "256M"); // We use a range for all experiments
+    let gpus_as_nodes = [true, false];
 
-    let nccl_debug_level = "INFO";  // Use `TRACE` for replayable trace information on every call
+    let nccl_debug_level = "INFO"; // Use `TRACE` for replayable trace information on every call
 
     // Store list of all experiment permutations
     let mut permutations = Vec::new();
+    let mut experiment_descriptors = Vec::new();
 
-    // Run experiments
-    for collective_exe in collective_exes {
-
+    // Create permutations
+    for collective in collectives {
         // Build executable path
+        let collective_exe = match collective {
+            "all-reduce" => "all_reduce_perf",
+            "all-gather" => "all_gather_perf",
+            "all-to-all" => "alltoall_perf",
+            "broadcast" => "broadcast_perf",
+            "gather" => "gather_perf",
+            "hypercube" => "hypercube_perf",
+            "reduce" => "reduce_perf",
+            "reduce-scatter" => "reduce_scatter_perf",
+            "scatter" => "scatter_perf",
+            "sendrecv" => "sendrecv_perf",
+            _ => {
+                return Err(format!("Could not figure out which NCCL-tests executable this collective name this corresponds to: {}", collective).into());
+            }
+        };
         let nccl_test_executable = nccl_test_bins.join(collective_exe);
+
+        #[cfg(not(feature = "no_check_paths"))]
         assert!(nccl_test_executable.exists());
 
         // Run experiments across all variations
-        for data_type in data_types {
-            for reduction_op in reduction_ops {
-                for comm_algorithm in comm_algorithms {
+        for buffer_size in buffer_sizes {
+            for data_type in data_types {
+                for reduction_op in reduction_ops {
+                    for comm_algorithm in comm_algorithms {
+                        // // Handle special cases for different communication algorithms
+                        // let (msccl_potential_chunks, msccl_potential_channels) =
+                        //     match comm_algorithm {
+                        //         "binary-tree" => (vec![8u64, 16, 32, 64, 128, 256], vec![1u64, 2]),
+                        //         "binomial-tree" => (vec![8, 16, 32, 64, 128], vec![1, 2]),
+                        //         "recursive-doubling-halving" => (vec![8, 16, 32], vec![1, 2]),
+                        //         "ring" => (vec![1, 2, 4], vec![2, 4, 8]),
+                        //         "double-binary-tree" => (vec![8, 16, 32, 64, 128, 256], vec![1, 2]),
+                        //         "double-binomial-tree" => (vec![8, 16, 32, 64, 128], vec![1, 2]),
+                        //         "trinomial-tree" => (vec![8, 16, 32, 64, 128], vec![1, 2]),
+                        //         "recursive-doubling" => (vec![8, 16, 32], vec![1, 2]),
+                        //         _ => panic!("[ERROR] Unknown comm_algorithm: {}", comm_algorithm),
+                        //     };
 
-                    // Handle special cases for different communication algorithms
-                    let (msccl_chunks, msccl_channels) = match comm_algorithm {
-                        "binary_tree" => (vec![8, 16, 32, 64, 128, 256], vec![1, 2]),
-                        "binomial_tree" => (vec![8, 16, 32, 64, 128], vec![1, 2]),
-                        "recursive_doubling_halving" => (vec![8, 16, 32], vec![1, 2]),
-                        "ring" => (vec![1, 2, 4], vec![2, 4, 8]),
-                        "double_binary_tree" => (vec![8, 16, 32, 64, 128, 256], vec![1, 2]),
-                        "double_binomial_tree" => (vec![8, 16, 32, 64, 128], vec![1, 2]),
-                        "trinomial_tree" => (vec![8, 16, 32, 64, 128], vec![1, 2]),
-                        "recursive_doubling" => (vec![8, 16, 32], vec![1, 2]),
-                        _ => panic!("[ERROR] Unknown comm_algorithm: {}", comm_algorithm)
-                    };
+                        // Create permutations
+                        for msccl_chunks in msccl_potential_chunks.iter() {
+                            for msccl_channels in msccl_potential_channels.iter() {
+                                for gpu_as_node in gpus_as_nodes {
+                                    // Figure out the name of potential the XML file name for this experiment
+                                    let xml_file_name = params_to_xml(
+                                        collective,
+                                        comm_algorithm,
+                                        num_nodes,
+                                        num_gpus.clone(),
+                                        msccl_channels.clone(),
+                                        msccl_chunks.clone(),
+                                        gpu_as_node,
+                                    )?;
 
-                    // Create permutations
-                    for msccl_chunk in msccl_chunks.iter() {
-                        for msccl_channel in msccl_channels.iter() {
-                            permutations.push(Permuation {
-                                collective_exe: collective_exe.to_string(),
-                                data_type: data_type.to_string(),
-                                reduction_op: reduction_op.to_string(),
-                                comm_algorithm: comm_algorithm.to_string(),
-                                msccl_channel: Some(msccl_channel.to_string()),
-                                msccl_chunk: Some(msccl_chunk.to_string())
-                            });
+                                    let xml_file = msccl_xmls_directory.join(xml_file_name);
+
+                                    // Verify that the XML file exists
+                                    // Note: We want to fail early if the XML file is not found rather than failing mid-way through
+                                    //       running the experiments.
+                                    #[cfg(not(feature = "no_check_paths"))]
+                                    if !xml_file.exists() {
+                                        panic!("[ERROR] During permutation generation, XML file not found at: {}. Quitting.", xml_file.to_str().unwrap());
+                                    }
+
+                                    // Create a full set of experiment parameters for this permutation
+                                    let experiment = MscclExperimentParams {
+                                        // Environment params
+                                        cuda_path: cuda_path.clone(),
+                                        efa_path: efa_path.clone(),
+                                        aws_ofi_nccl_path: aws_ofi_nccl_path.clone(),
+                                        openmpi_path: openmpi_path.clone(),
+                                        msccl_path: msccl_path.clone(),
+
+                                        // MSCCL params
+                                        algorithm: comm_algorithm.to_string(),
+                                        ms_xml_file: xml_file,
+                                        ms_channels: msccl_channels.clone(),
+                                        ms_chunks: msccl_chunks.clone(),
+                                        gpu_as_node,
+                                        num_nodes,
+                                        total_gpus: num_gpus,
+
+                                        // MPI Params
+                                        mpi_hostfile_path: mpi_hostfile_path.clone(),
+                                        mpi_proc_per_node: gpus_per_node.clone(),
+
+                                        // NCCL Tests params
+                                        nc_collective: collective.to_string(),
+                                        nc_op: reduction_op.to_string(),
+                                        nc_dtype: data_type.to_string(),
+                                        nc_num_threads: 1,
+                                        nc_num_gpus: 1,
+                                        nc_min_bytes: message_size_range.0.to_string(),
+                                        nc_max_bytes: message_size_range.1.to_string(),
+                                        nc_step_factor: "2".to_string(),
+                                        nc_num_iters: 100,
+                                        nc_num_warmup_iters: 20,
+
+                                        // NCCL Env params
+                                        nccl_debug_level: nccl_debug_level.to_string(),
+                                        nccl_algo:
+                                            "Tree,Ring,CollnetDirect,CollnetChain,NVLS,NVLSTree"
+                                                .to_string(), // Default NCCL
+                                    };
+
+                                    // Add the full experiment to the list
+                                    experiment_descriptors.push(experiment);
+
+                                    // Add the permutation to the list
+                                    permutations.push(Permutation {
+                                        collective_exe: collective_exe.to_string(),
+                                        data_type: data_type.to_string(),
+                                        reduction_op: reduction_op.to_string(),
+                                        comm_algorithm: comm_algorithm.to_string(),
+                                        msccl_channel: Some(msccl_channels.to_string()),
+                                        msccl_chunk: Some(msccl_chunks.to_string()),
+                                        buffer_size: Some(buffer_size.to_string()),
+                                    });
+                                }
+                            }
                         }
                     }
                 }
             }
         }
     }
+    debug!("Finished generating all permutations/experiment configs.");
+
+    // Pretty-print the permutations
+    pretty_print_configs(&experiment_descriptors, false);
 
     // ACTUALLY run experiments by iterating over the list of permutations
-    for permutation in permutations {
+    let total_experiments = experiment_descriptors.len() * num_repetitions;
+    for (progress, experiment_descriptor) in experiment_descriptors.iter().enumerate() {
         for i in 0..num_repetitions {
-            // Compat (so we can copy/paste from previous implementation)
-            let nccl_test_executable = nccl_test_bins.join(permutation.collective_exe.clone());
-            let collective_exe = permutation.collective_exe.clone();
-            let data_type = permutation.data_type.clone();
-            let reduction_op = permutation.reduction_op.clone();
-            let comm_algorithm = permutation.comm_algorithm.clone();
-            let msccl_channel = permutation.msccl_channel.clone().unwrap();
-            let msccl_chunk = permutation.msccl_chunk.clone().unwrap();
-
+            // debug!("Experiment descriptor found: {:#?}", experiment_descriptor);
 
             // Print info about this experiment
-            println!("Running collective {} (Op: {}) with data type: {}, comm algorithm: {}, MSCCL channel: {}, MSCCL chunk: {} ({} of {})", 
-                collective_exe, reduction_op, data_type, comm_algorithm, msccl_channel, msccl_chunk, i + 1, num_repetitions);
+            // info!("Running collective {} (Op: {}) with data type: {}, comm algorithm: {}, MSCCL channel: {}, MSCCL chunk: {} ({} of {})",
+            //     collective_exe, reduction_op, data_type, comm_algorithm, msccl_channel, msccl_chunk, i + 1, num_repetitions);
+            info!(
+                "### Running experiment [ # nodes: {} | # GPUs: {} | collective: {} | op: {} | dtype: {} | algorithm: {} | channels: {} | chunks: {} | GPU as Node: {:#?} | experiment {} of {} ] ###",
+                experiment_descriptor.num_nodes,
+                experiment_descriptor.total_gpus,
+                experiment_descriptor.nc_collective,
+                experiment_descriptor.nc_op,
+                experiment_descriptor.nc_dtype,
+                experiment_descriptor.algorithm,
+                experiment_descriptor.ms_channels,
+                experiment_descriptor.ms_chunks,
+                experiment_descriptor.gpu_as_node,
+                i + 1,
+                num_repetitions
+            );
 
-            // Find name of the collective algorithm (different from the binary)
-            // Note: Necessary because Ly's XML naming scheme is different
-            let algo_name = match collective_exe.as_str() {
-                "all_reduce_perf" => "allreduce",
-                "all_gather_perf" => "allgather",
-                "alltoall_perf" => "alltoall",
-                "broadcast_perf" => "broadcast",
-                "gather_perf" => "gather",
-                "hypercube_perf" => "hypercube",
-                "reduce_perf" => "reduce",
-                "reduce_scatter_perf" => "reducescatter",
-                "scatter_perf" => "scatter",
-                "sendrecv_perf" => "sendrecv",
-                _ => panic!("[ERROR] Unknown collective algorithm: {}", collective_exe)
-            };
+            info!(
+                "Will attempt to use MSCCL XML file at: {}",
+                experiment_descriptor.ms_xml_file.to_str().unwrap()
+            );
 
-            // Select correct XML file
-            let xml_file = msccl_xmls_directory.join(format!(
-                "{}_{}_{}ch_{}chunk.xml", 
-                algo_name, 
-                comm_algorithm,
-                msccl_channel,
-                msccl_chunk
-            ));
-            
-            if !xml_file.exists() {
-                println!("[ERROR] XML file not found at: {}. Skipping to next experiment.", xml_file.to_str().unwrap());
-                continue;
-            }
-            println!("Will attempt to use MSCCL XML file at: {}", xml_file.to_str().unwrap());
-
-            // Handle special case for `trinomial_tree` algorithm (requested by Liuyao)
-            let (min_bytes, max_bytes) = match comm_algorithm.as_str() {
-                "trinomial_tree" => ("192K", "768M"),
-                _ => ("128K", "512M")
-            };
-
-            // Run NCCL test
-            println!("Running of collective {} (Op: {}) with data type: {}, ({} of {})", collective_exe, reduction_op, data_type, i + 1, num_repetitions);
-            let rows;
-            rows = match run_nccl_test(
-                &mpi_hostfile,
-                &nccl_test_executable,
-                Some(&xml_file),
-                gpus_per_node.as_str(), // 8xA100 GPUs per node
-                "1", 
-                "1",      // 1 GPU per MPI process
-                min_bytes, 
-                max_bytes, 
-                "2", 
-                reduction_op.as_str(), 
-                data_type.as_str(), 
-                "20", 
-                "5", 
-                nccl_debug_level,
-                true  // Why? Well, Liuyao's tests techincally return a nonzero status code
+            let rows = match run_msccl_tests(
+                &mpi_hostfile_path,
+                &experiment_descriptor,
+                true, // Why? Well, Liuyao's testo sometimes return a nonzero status code
+                dry_run
             ) {
                 Ok(v) => v,
                 Err(e) => {
-                    println!("[ERROR] Error running NCCL test: {}", e);
+                    error!(
+                        "Encountered an error while running NCCL Tests: {}. Continuing...",
+                        e
+                    );
 
                     // Continue to next experiments
                     continue;
                 }
             };
 
-            // Convert rows to DataFrame
-            let mut df = rows_to_df(rows).unwrap();
-            println!("DataFrame: {:?}", df);
-
-            // Write to CSV
-            let csv_file = experiments_output_dir.as_path().join(format!(
-                "{}_{}_{}_{}_mcl{}_mck{}_i{}.csv", 
-                collective_exe, reduction_op, data_type, comm_algorithm, msccl_channel, msccl_chunk, i
-            ));
-            println!("Writing results to CSV at {}...", csv_file.to_str().unwrap());
-            let opened_file = std::fs::File::create(&csv_file)?;
-            CsvWriter::new(opened_file)
-                .finish(&mut df)?;
-            println!("Wrote results to CSV at {}.", csv_file.to_str().unwrap());
+            info!(
+                "Finished running experiment. Completed {} of {} experiments ({:.1}%).",
+                progress * 2 + i + 1,
+                total_experiments,
+                if total_experiments > 0 {
+                    ((progress * 2 + i + 1) as f64 / total_experiments as f64) * 100.0
+                } else {
+                    100.0
+                }
+            );
 
             // Print line separator
-            println!("---------------------------------");
+            info!("---------------------------------------");
         }
     }
 
     Ok(())
 }
 
-/// Convert rows to a Polars DataFrame
-/// 
-/// Note: The implementaiton is very manual and not efficient.
-fn rows_to_df(rows: Vec<Row>) -> Result<DataFrame, Box<dyn std::error::Error>> {
-    // Create the dataframe
-    let df = DataFrame::new(vec![
-        Series::new("size", rows.iter().map(|r| r.size).collect::<Vec<u64>>()),
-        Series::new("count", rows.iter().map(|r| r.count).collect::<Vec<u64>>()),
-        Series::new("dtype", rows.iter().map(|r| r.dtype.clone()).collect::<Vec<String>>()),
-        Series::new("redop", rows.iter().map(|r| r.redop.clone()).collect::<Vec<String>>()),
-        Series::new("root", rows.iter().map(|r| r.root).collect::<Vec<i64>>()),
-        Series::new("oop_time", rows.iter().map(|r| r.oop_time).collect::<Vec<f64>>()),
-        Series::new("oop_alg_bw", rows.iter().map(|r| r.oop_alg_bw).collect::<Vec<f64>>()),
-        Series::new("oop_bus_bw", rows.iter().map(|r| r.oop_bus_bw).collect::<Vec<f64>>()),
-        Series::new("oop_num_wrong", rows.iter().map(|r| r.oop_num_wrong.clone()).collect::<Vec<String>>()),
-        Series::new("ip_time", rows.iter().map(|r| r.ip_time).collect::<Vec<f64>>()),
-        Series::new("ip_alg_bw", rows.iter().map(|r| r.ip_alg_bw).collect::<Vec<f64>>()),
-        Series::new("ip_bus_bw", rows.iter().map(|r| r.ip_bus_bw).collect::<Vec<f64>>()),
-        Series::new("ip_num_wrong", rows.iter().map(|r| r.ip_num_wrong.clone()).collect::<Vec<String>>())
-    ])?;
+// /// Run NCCL tests with MPI using a set of parameters
+// fn run_nccl_test(hostfile_path: &Path, executable: &Path, msccl_xml_file: Option<&Path>,
+//     proc_per_node: &str, num_threads: &str, num_gpus: &str, min_bytes: &str, max_bytes: &str, step_factor: &str, 
+//     op: &str, datatype: &str, num_iters: &str, num_warmup_iters: &str, nccl_debug_level: &str, ignore_error_status_codes: bool) -> Result<Vec<Row>, Box<dyn std::error::Error>> {
 
-    Ok(df)
-}
+//     // // Open output files
+//     // let stdout_file = match stdout_output.exists() {
+//     //     true => std::fs::OpenOptions::new().append(true).open(stdout_output)?,
+//     //     false => std::fs::File::create(stdout_output)?
+//     // };
+//     // let stderr_file = match stderr_output.exists() {
+//     //     true => std::fs::OpenOptions::new().append(true).open(stderr_output)?,
+//     //     false => std::fs::File::create(stderr_output)?
+//     // };
+//     // let mut stdout_writer = std::io::BufWriter::new(stdout_file);
+//     // let mut stderr_writer = std::io::BufWriter::new(stderr_file);
 
-/// Parse a line from the NCCL output
-/// 
-/// Note: Only returns something if the line is a table data row
-fn parse_line(line: &str) -> Result<Option<Row>, Box<dyn std::error::Error>> {
-    let line_slice = line.split_whitespace().collect::<Vec<&str>>();
+//     // MSCCL XML file handling (just use dummy envvar if not given an XML file)
+//     let msccl_xml_envvar = match msccl_xml_file {
+//         Some(p) => {
+//             println!("Using MSCCL XML file at: {}", p.to_str().unwrap());
+//             format!("MSCCL_XML_FILES={}", p.to_str().unwrap())
+//         },
+//         None => {
+//             println!("[INFO] No MSCCL XML file was given, so using dummy envvar.");
+//             "DUMMY_VAR=TRUE".to_string()
+//         }
+//     };
 
-    // Describes the prelude to a logfile
-    let re = Regex::new(r"[A-z0-9]+:[0-9]+:[0-9]+").unwrap();
+//     // Other MSCCL envvar
+//     let gen_msccl_xml = match msccl_xml_file {
+//         Some(_) => "GENMSCCLXML=1".to_string(),
+//         None => "GDUMMY_VAR=TRUE".to_string()
+//     };
 
-    // Handle log rows
-    if re.is_match(line) {
-        // println!("[l]: {:?}", line);
-        return Ok(None);
-    } 
-    
-    // Handle table data rows
-    else if line_slice.len() == 13 {
-        // 13 columns in the NCCL output table
-        // println!("Data Slice: {:?}", line_slice);
-        
-        // Create row
-        let row = Row {
-            size: match line_slice[0].parse::<u64>() {
-                Ok(v) => v,
-                Err(e) => {
-                    println!("Error parsing size: {}", e);
-                    return Ok(None);
-                }
-            
-            },
-            count: match line_slice[1].parse::<u64>() {
-                Ok(v) => v,
-                Err(e) => {
-                    println!("Error parsing count: {}", e);
-                    return Ok(None);
-                }
-            },
-            dtype: line_slice[2].to_string(),
-            redop: match line_slice[3].to_string().is_empty() {
-                true => "N/A".to_string(),
-                false => line_slice[3].to_string()
-            
-            },
-            root: match line_slice[4].parse::<i64>() {
-                Ok(v) => v,
-                Err(e) => {
-                    println!("Error parsing root: {}", e);
-                    return Ok(None);
-                }
-            },
-            oop_time: match line_slice[5].parse::<f64>() {
-                Ok(v) => v,
-                Err(e) => {
-                    println!("Error parsing oop_time: {}", e);
-                    return Ok(None);
-                }
-            },
-            oop_alg_bw: match line_slice[6].parse::<f64>() {
-                Ok(v) => v,
-                Err(e) => {
-                    println!("Error parsing oop_alg_bw: {}", e);
-                    return Ok(None);
-                }
-            },
-            oop_bus_bw: match line_slice[7].parse::<f64>() {
-                Ok(v) => v,
-                Err(e) => {
-                    println!("Error parsing oop_bus_bw: {}", e);
-                    return Ok(None);
-                }
-            },
-            oop_num_wrong: line_slice[8].to_string(),
-            ip_time: match line_slice[9].parse::<f64>() {
-                Ok(v) => v,
-                Err(e) => {
-                    println!("Error parsing ip_time: {}", e);
-                    return Ok(None);
-                }
-            },
-            ip_alg_bw: match line_slice[10].parse::<f64>() {
-                Ok(v) => v,
-                Err(e) => {
-                    println!("Error parsing ip_alg_bw: {}", e);
-                    return Ok(None);
-                }
-            },
-            ip_bus_bw: match line_slice[11].parse::<f64>() {
-                Ok(v) => v,
-                Err(e) => {
-                    println!("Error parsing ip_bus_bw: {}", e);
-                    return Ok(None);
-                }
-            },
-            ip_num_wrong: line_slice[12].to_string()
-        };
-        // println!("Row: {:?}", row);
+//     // Run NCCL tests with MPI
+//     // TODO: Verify that OpenMPI passes through required environment variables
+//     println!("Running NCCL tests with MPI...");
+//     let mut res = Command::new("mpirun")
+//         .args(["--hostfile", hostfile_path.to_str().unwrap()])
+//         .args(["--map-by", format!("ppr:{}:node", proc_per_node).as_str()])
+//         // [HACK] FIXME: This hardcoded LD_LIBRARY_PATH is awful and needs to be removed!
+//         .args(["-x", format!("LD_LIBRARY_PATH=/opt/aws-ofi-nccl-lyd/lib:/opt/amazon/openmpi/lib64:/home/ec2-user/deps/msccl/build/lib:/usr/local/cuda/lib64:{}", std::env::var("LD_LIBRARY_PATH").unwrap().as_str()).as_str()])
+//         .args(["-x", msccl_xml_envvar.as_str()])
+//         .args(["-x", gen_msccl_xml.as_str()])
+//         .args(["-x", format!("NCCL_DEBUG={}", nccl_debug_level).as_str()])
+//         .args(["-x", "FI_EFA_USE_DEVICE_RDMA=1"])
+//         .args(["-x", "FI_EFA_FORK_SAFE=1"])
+//         .args(["--mca", "btl", "tcp,self", "--mca", "btl_tcp_if_exclude", "lo,docker0", "--bind-to", "none"])
+//         .arg(executable.to_str().unwrap())
+//         .args(["--nthreads", format!("{}", num_threads).as_str()])
+//         .args(["--ngpus", num_gpus])
+//         .args(["--minbytes", min_bytes])
+//         .args(["--maxbytes", max_bytes])
+//         .args(["--stepfactor", step_factor])
+//         .args(["--op", op])
+//         .args(["--datatype", datatype])
+//         .args(["--iters", num_iters])
+//         .args(["--warmup_iters", num_warmup_iters])
+//         .stdout(std::process::Stdio::piped())
+//         .stderr(std::process::Stdio::piped())
+//         .spawn()
+//         .expect("[ERROR] FAILED TO RUN WITH MPI!!!!");
 
-        // Return that a line was successfully parsed
-        return Ok(Some(row));
-    }
+//     // Create vector to store rows
+//     let mut rows = Vec::new();
 
-    Ok(None)
-}
+//     // Print and handle stdout line by line
+//     let stdout_reader = std::io::BufReader::new(res.stdout.take().unwrap());
+//     // let reader = std::io::BufReader::new(res.stdout.take().unwrap().as_fd());
+//     for line in stdout_reader.lines() {
+//         match line {
+//             Ok(line) => {
+//                 // // Write line to file
+//                 // match stdout_writer.write_all(line.as_bytes()) {
+//                 //     Ok(_) => {},
+//                 //     Err(e) => {
+//                 //         println!("[E]: Error writing line to stdout file: {}", e);
+//                 //     }
+//                 // }
 
-/// Run NCCL tests with MPI using a set of parameters
-fn run_nccl_test(hostfile_path: &Path, executable: &Path, msccl_xml_file: Option<&Path>,
-    proc_per_node: &str, num_threads: &str, num_gpus: &str, min_bytes: &str, max_bytes: &str, step_factor: &str, 
-    op: &str, datatype: &str, num_iters: &str, num_warmup_iters: &str, nccl_debug_level: &str, ignore_error_status_codes: bool) -> Result<Vec<Row>, Box<dyn std::error::Error>> {
-
-    // // Open output files
-    // let stdout_file = match stdout_output.exists() {
-    //     true => std::fs::OpenOptions::new().append(true).open(stdout_output)?,
-    //     false => std::fs::File::create(stdout_output)?
-    // };
-    // let stderr_file = match stderr_output.exists() {
-    //     true => std::fs::OpenOptions::new().append(true).open(stderr_output)?,
-    //     false => std::fs::File::create(stderr_output)?
-    // };
-    // let mut stdout_writer = std::io::BufWriter::new(stdout_file);
-    // let mut stderr_writer = std::io::BufWriter::new(stderr_file);
-
-    // MSCCL XML file handling (just use dummy envvar if not given an XML file)
-    let msccl_xml_envvar = match msccl_xml_file {
-        Some(p) => {
-            println!("Using MSCCL XML file at: {}", p.to_str().unwrap());
-            format!("MSCCL_XML_FILES={}", p.to_str().unwrap())
-        },
-        None => {
-            println!("[INFO] No MSCCL XML file was given, so using dummy envvar.");
-            "DUMMY_VAR=TRUE".to_string()
-        }
-    };
-
-    // Other MSCCL envvar
-    let gen_msccl_xml = match msccl_xml_file {
-        Some(_) => "GENMSCCLXML=1".to_string(),
-        None => "GDUMMY_VAR=TRUE".to_string()
-    };
-
-    // Run NCCL tests with MPI
-    // TODO: Verify that OpenMPI passes through required environment variables
-    println!("Running NCCL tests with MPI...");
-    let mut res = Command::new("mpirun")
-        .args(["--hostfile", hostfile_path.to_str().unwrap()])
-        .args(["--map-by", format!("ppr:{}:node", proc_per_node).as_str()])
-        // [HACK] FIXME: This hardcoded LD_LIBRARY_PATH is awful and needs to be removed!
-        .args(["-x", format!("LD_LIBRARY_PATH=/opt/aws-ofi-nccl-lyd/lib:/opt/amazon/openmpi/lib64:/home/ec2-user/deps/msccl/build/lib:/usr/local/cuda/lib64:{}", std::env::var("LD_LIBRARY_PATH").unwrap().as_str()).as_str()])
-        .args(["-x", msccl_xml_envvar.as_str()])
-        .args(["-x", gen_msccl_xml.as_str()])
-        .args(["-x", format!("NCCL_DEBUG={}", nccl_debug_level).as_str()])
-        .args(["-x", "FI_EFA_FORK_SAFE=1"])
-        .args(["--mca", "btl", "tcp,self", "--mca", "btl_tcp_if_exclude", "lo,docker0", "--bind-to", "none"])
-        .arg(executable.to_str().unwrap())
-        .args(["--nthreads", format!("{}", num_threads).as_str()])
-        .args(["--ngpus", num_gpus])
-        .args(["--minbytes", min_bytes])
-        .args(["--maxbytes", max_bytes])
-        .args(["--stepfactor", step_factor])
-        .args(["--op", op])
-        .args(["--datatype", datatype])
-        .args(["--iters", num_iters])
-        .args(["--warmup_iters", num_warmup_iters])
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .expect("[ERROR] FAILED TO RUN WITH MPI!!!!");
-
-    // Create vector to store rows
-    let mut rows = Vec::new();
-
-    // Print and handle stdout line by line
-    let stdout_reader = std::io::BufReader::new(res.stdout.take().unwrap());
-    // let reader = std::io::BufReader::new(res.stdout.take().unwrap().as_fd());
-    for line in stdout_reader.lines() {
-        match line {
-            Ok(line) => {
-                // // Write line to file
-                // match stdout_writer.write_all(line.as_bytes()) {
-                //     Ok(_) => {},
-                //     Err(e) => {
-                //         println!("[E]: Error writing line to stdout file: {}", e);
-                //     }
-                // }
-
-                // Parse line, get row if this is a table data row
-                if let Some(row) = parse_line(line.as_str()).unwrap() {
-                    rows.push(row);
-                    println!("[r]: {}", line);
-                } 
+//                 // Parse line, get row if this is a table data row
+//                 if let Some(row) = parse_line(line.as_str()).unwrap() {
+//                     rows.push(row);
+//                     println!("[r]: {}", line);
+//                 } 
                 
-                // Just print the line if it isn't a table data row
-                else {
-                    println!("[l]: {}", line);
-                }
-            },
-            Err(e) => {
-                println!("Error parsing line: {}", e);
-            }
-        }
-    }
+//                 // Just print the line if it isn't a table data row
+//                 else {
+//                     println!("[l]: {}", line);
+//                 }
+//             },
+//             Err(e) => {
+//                 println!("Error parsing line: {}", e);
+//             }
+//         }
+//     }
 
-    // Print stderr
-    // FIXME: Won't actually print if there's a hang-related error! The stdout reader never finishes reading!
-    let stderr_reader = std::io::BufReader::new(res.stderr.take().unwrap());
-    for line in stderr_reader.lines() {
-        match line {
-            Ok(line) => {
-                // // Write line to file
-                // match stderr_writer.write_all(line.as_bytes()) {
-                //     Ok(_) => {},
-                //     Err(e) => {
-                //         println!("[E]: Error writing line to stdout file: {}", e);
-                //     }
-                // }
+//     // Print stderr
+//     // FIXME: Won't actually print if there's a hang-related error! The stdout reader never finishes reading!
+//     let stderr_reader = std::io::BufReader::new(res.stderr.take().unwrap());
+//     for line in stderr_reader.lines() {
+//         match line {
+//             Ok(line) => {
+//                 // // Write line to file
+//                 // match stderr_writer.write_all(line.as_bytes()) {
+//                 //     Ok(_) => {},
+//                 //     Err(e) => {
+//                 //         println!("[E]: Error writing line to stdout file: {}", e);
+//                 //     }
+//                 // }
 
-                // Print the line
-                println!("[E]: {}", line);
-            },
-            Err(e) => {
-                println!("[ERROR] Error getting line from stdout: {}", e);
-            }
-        }
-    }
+//                 // Print the line
+//                 println!("[E]: {}", line);
+//             },
+//             Err(e) => {
+//                 println!("[ERROR] Error getting line from stdout: {}", e);
+//             }
+//         }
+//     }
 
-    // Handle exit status
-    let status = res.wait()?;
-    match status.success() {
-        true => println!("NCCL tests with MPI ran successfully."),
-        false => {
-            if !ignore_error_status_codes {
-                println!("NCCL tests with MPI failed with exit code: {}", status.code().unwrap());
-                return Err("NCCL tests with MPI failed.".into());
-            } else {
-                println!("NCCL tests with MPI failed with exit code: {}, but ignoring and continuing.", 
-                    status.code().unwrap());
-            }
-        }
-    }
+//     // Handle exit status
+//     let status = res.wait()?;
+//     match status.success() {
+//         true => println!("NCCL tests with MPI ran successfully."),
+//         false => {
+//             if !ignore_error_status_codes {
+//                 println!("NCCL tests with MPI failed with exit code: {}", status.code().unwrap());
+//                 return Err("NCCL tests with MPI failed.".into());
+//             } else {
+//                 println!("NCCL tests with MPI failed with exit code: {}, but ignoring and continuing.", 
+//                     status.code().unwrap());
+//             }
+//         }
+//     }
 
-    Ok(rows)
-}
+//     Ok(rows)
+// }
+
+// /// Struct that describes a set of parameters to run MSCCL with
+// struct MscclExperimentParams {
+//     // Environment Params
+//     cuda_path: &str,
+//     efa_path: Option<&str>,
+//     aws_ofi_nccl_path: Option<&str>,
+//     openmpi_path: &str,
+//     msccl_path: &str,
+
+//     // MSCCL Params
+//     xml_file: &Path,
+
+//     // MPI Params
+//     hostfile_path: &Path,
+//     mpi_proc_per_node: u64,
+
+//     // NCCL Tests Params
+//     nc_op: &str,
+//     nc_dtype: &str,
+//     nc_num_threads: u64,
+//     nc_num_gpus: u64,
+//     nc_min_bytes: &str,
+//     nc_max_bytes: &str,
+//     nc_step_factor: &str,
+//     nc_num_iters: u64,
+//     nc_num_warmup_iters: u64,
+
+//     // NCCL Env Params
+//     nccl_debug_level: &str,
+//     nccl_algo: &str,
+// }

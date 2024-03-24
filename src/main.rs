@@ -6,7 +6,7 @@ use polars::prelude::*;
 use log::{debug, info, warn, error};
 
 mod util;
-use util::{Row, Permutation, MscclExperimentParams, params_to_xml, verify_env, pretty_print_configs};
+use util::{Row, Permutation, MscclExperimentParams, params_to_xml, verify_env, pretty_print_configs, collective_to_test_exe};
 
 mod parse;
 use parse::{rows_to_df, parse_line};
@@ -209,22 +209,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create permutations
     for collective in collectives {
         // Build executable path
-        let collective_exe = match collective {
-            "all-reduce" => "all_reduce_perf",
-            "all-gather" => "all_gather_perf",
-            "all-to-all" => "alltoall_perf",
-            "broadcast" => "broadcast_perf",
-            "gather" => "gather_perf",
-            "hypercube" => "hypercube_perf",
-            "reduce" => "reduce_perf",
-            "reduce-scatter" => "reduce_scatter_perf",
-            "scatter" => "scatter_perf",
-            "sendrecv" => "sendrecv_perf",
-            _ => {
-                return Err(format!("Could not figure out which NCCL-tests executable this collective name this corresponds to: {}", collective).into());
-            }
-        };
-        let nccl_test_executable = nccl_test_bins.join(collective_exe);
+        let collective_exe = collective_to_test_exe(collective)?;
+        let nccl_test_executable = nccl_test_bins.join(collective_exe.clone());
 
         #[cfg(not(feature = "no_check_paths"))]
         assert!(nccl_test_executable.exists());

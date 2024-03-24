@@ -70,6 +70,32 @@ pub struct MscclExperimentParams {
     pub nccl_algo: String,
 }
 
+/// Get the name of the NCCL-tests executable that corresponds to the given collective name.
+/// 
+/// # Arguments
+/// * `collective` - The name of the collective to get the corresponding NCCL-tests executable name for
+/// 
+/// # Returns
+/// The name of the NCCL-tests executable that corresponds to the given collective name
+#[inline(always)]
+pub fn collective_to_test_exe(collective: &str) -> Result<String, Box<dyn std::error::Error>> {
+    match collective {
+        "all-reduce" => Ok("all_reduce_perf".to_string()),
+        "all-gather" => Ok("all_gather_perf".to_string()),
+        "all-to-all" => Ok("alltoall_perf".to_string()),
+        "broadcast" => Ok("broadcast_perf".to_string()),
+        "gather" => Ok("gather_perf".to_string()),
+        "hypercube" => Ok("hypercube_perf".to_string()),
+        "reduce" => Ok("reduce_perf".to_string()),
+        "reduce-scatter" => Ok("reduce_scatter_perf".to_string()),
+        "scatter" => Ok("scatter_perf".to_string()),
+        "sendrecv" => Ok("sendrecv_perf".to_string()),
+        _ => {
+            return Err(format!("Could not figure out which NCCL-tests executable this collective name this corresponds to: {}", collective).into());
+        }
+    }
+}
+
 /// Pretty print the given vector of MSCCL experiment parameters as a table.
 ///
 /// # Arguments

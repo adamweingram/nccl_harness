@@ -1,4 +1,4 @@
-use std::io::BufRead;
+use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use log::{debug, info, warn, error};
@@ -10,7 +10,9 @@ pub fn run_msccl_tests(
     executable: &Path,
     exp_params: &MscclExperimentParams,
     ignore_error_status_codes: bool,
-    dry_run: bool
+    dry_run: bool,
+    output_path: Option<PathBuf>,
+    stderr_path: Option<PathBuf>,
 ) -> Result<Vec<Row>, Box<dyn std::error::Error>> {
     // Build the LD_LIBRARY_PATH from the given environment variables
     let mut ld_library_path = format!(
@@ -101,12 +103,63 @@ pub fn run_msccl_tests(
     // Create vector to store rows
     let mut rows = Vec::new();
 
+    // Open output file for writing
+    let mut output_file = match output_path {
+        Some(path) => {
+            debug!("Opening output file at: {}", path.to_str().unwrap());
+            let res = match std::fs::File::create(path.clone()) {
+                Ok(f) => Some(f),
+                Err(e) => {
+                    error!("Error creating output file {:?}. WILL NOT LOG OUTPUT AS SEPARATE FILE!: {}", path, e);
+                    None
+                }
+            };
+
+            res
+        }
+        None => None,
+    };
+
+    let mut stderr_file = match stderr_path {
+        Some(path) => {
+            debug!("Opening stderr file at: {}", path.to_str().unwrap());
+            let res = match std::fs::File::create(path.clone()) {
+                Ok(f) => Some(f),
+                Err(e) => {
+                    error!("Error creating stderr file {:?}. WILL NOT LOG STDERR AS SEPARATE FILE!: {}", path, e);
+                    None
+                }
+            };
+
+            res
+        }
+        None => None,
+    };
+
     // Print and handle stdout line by line
     let stdout_reader = std::io::BufReader::new(res.stdout.take().unwrap());
     for line in stdout_reader.lines() {
         match line {
             Ok(line) => {
                 debug!("[l]: {}", line);
+
+                // Write to output file
+                if let Some(file) = &mut output_file {
+                    match file.write_all(line.as_bytes()) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!("Error writing line to output file: {}", e);
+                        }
+                    
+                    };
+                    
+                    match file.write_all(b"\n") {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!("Error writing newline to output file: {}", e);
+                        }
+                    };
+                }
 
                 // Parse line
                 // TODO: Add function when stable
@@ -125,9 +178,27 @@ pub fn run_msccl_tests(
             Ok(line) => {
                 // Print the line
                 debug!("[E]: {}", line);
+
+                // Write to stderr file
+                if let Some(file) = &mut stderr_file {
+                    match file.write_all(line.as_bytes()) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!("Error writing line to stderr file: {}", e);
+                        }
+                    
+                    };
+                    
+                    match file.write_all(b"\n") {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!("Error writing newline to stderr file: {}", e);
+                        }
+                    };
+                }
             }
             Err(e) => {
-                error!("Error getting line from stdout BufReader: {}", e);
+                error!("Error getting line from stderr BufReader: {}", e);
             }
         }
     }

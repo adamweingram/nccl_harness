@@ -77,6 +77,7 @@ pub enum ResultDescription {
     Success,
     PartialFailure,
     Failure,
+    Skipped,
 }
 
 impl fmt::Display for ResultDescription {
@@ -85,6 +86,7 @@ impl fmt::Display for ResultDescription {
             ResultDescription::Success => write!(f, "Success"),
             ResultDescription::PartialFailure => write!(f, "Partial Failure"),
             ResultDescription::Failure => write!(f, "Failure"),
+            ResultDescription::Skipped => write!(f, "Skipped"),
         }
     }
 }
@@ -102,6 +104,24 @@ pub struct ManifestEntry {
     pub buffer_size_factor: u64,
 
     pub overall_result: ResultDescription,
+}
+
+/// Get the name of the output file for a set of given MSCCL experiment parameters
+#[inline(always)]
+pub fn exp_params_to_output_filename(params: &MscclExperimentParams, extension: &str) -> PathBuf {
+    // (collective)_(algorithm)_node(# nodes)_gpu(# gpus)_mcl(# channels)_mck(# chunks)_buf(scl. fac.)_gan(1|0).(extension)
+    PathBuf::from(format!(
+        "{}_{}_node{}_gpu{}_mcl{}_mck{}_buf{}_gan{}.{}",
+        params.nc_collective,
+        params.algorithm,
+        params.num_nodes,
+        params.total_gpus,
+        params.ms_channels,
+        params.ms_chunks,
+        params.buffer_size,
+        if params.gpu_as_node { 1 } else { 0 },
+        extension
+    ))
 }
 
 /// Get the name of the NCCL-tests executable that corresponds to the given collective name.
@@ -207,6 +227,7 @@ pub fn pretty_print_result_manifest(entries: &Vec<ManifestEntry>) {
             ResultDescription::Success => format!("✅ {}", entry.overall_result),
             ResultDescription::PartialFailure => format!("🚨 {}", entry.overall_result),
             ResultDescription::Failure => format!("❌ {}", entry.overall_result),
+            ResultDescription::Skipped => format!("⏭️ {}", entry.overall_result),
         };
 
         table.add_row(prettytable::Row::new(vec![

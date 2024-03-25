@@ -15,6 +15,8 @@ use parse::{rows_to_df, parse_line};
 mod wrapper;
 use wrapper::run_msccl_tests;
 
+use crate::util::exp_params_to_output_filename;
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logger
     env_logger::init();
@@ -143,18 +145,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Experiments Output Directory
     let experiments_output_dir = match std::env::var("EXPERIMENTS_OUTPUT_DIR") {
         Ok(v) => {
+            debug!("EXPERIMENTS_OUTPUT_DIR set to: {}", v);
             let path = PathBuf::from(v);
 
-            // Verify that the directory exists. Otherwise, create it
-            #[cfg(not(feature = "no_check_paths"))]
+            // Verify that the directory exists. Otherwise, create it.
             if !path.exists() {
                 std::fs::create_dir(path.as_path())?;
+                debug!("Created experiment log output directory at: {:?}", path);
+            } else {
+                debug!("Experiment log output directory already exists at: {:?}", path);
             }
 
             path
         }
         Err(_) => {
             panic!("[ERROR] Envvar EXPERIMENTS_OUTPUT_DIR not set!");
+        }
+    };
+
+    // Check if should skip previously completed experiments (ala makefile)
+    let skip_finished = match std::env::var("SKIP_FINISHED") {
+        Ok(v) => {
+            if v.to_lowercase() == "true" || v.to_lowercase() == "1" {
+                info!("⏭️ Found 'SKIP_FINISHED=true', will skip experiments that already have an output file! ⏭️");
+                true
+            } else {
+                info!("Found 'SKIP_FINISHED=false', will NOT skip experiments that already have an output file.");
+                false
+            }
+        }
+        Err(_) => {
+            info!("Did not find a setting for 'SKIP_FINISHED', will NOT skip experiments that already have an output file.");
+            false
         }
     };
 
@@ -410,11 +432,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 experiment_descriptor.ms_xml_file.to_str().unwrap()
             );
 
+            // Get the output file paths
+            let output_path = experiments_output_dir.clone().join(
+                exp_params_to_output_filename(&experiment_descriptor, "log"),
+            );
+            let stderr_path = experiments_output_dir.clone().join(
+                exp_params_to_output_filename(&experiment_descriptor, "stderr")
+            );
+
+            // Skip if already completed and skip envvar is set
+            if skip_finished && output_path.exists() {
+                info!("Skipping experiment because output file already exists at: {:?} and 'SKIP_COMPLETED' envvar is set.", output_path);
+
+                // Update manifest
+                manifest_collection.push(ManifestEntry {
+                    collective: experiment_descriptor.nc_collective.clone(),
+                    op: experiment_descriptor.nc_op.clone(),
+                    dtype: experiment_descriptor.nc_dtype.clone(),
+                    algorithm: experiment_descriptor.algorithm.clone(),
+                    num_channels: experiment_descriptor.ms_channels,
+                    num_chunks: experiment_descriptor.ms_chunks,
+                    num_gpus: experiment_descriptor.total_gpus,
+                    buffer_size_factor: experiment_descriptor.buffer_size,
+                    overall_result: ResultDescription::Skipped,
+                });
+
+                info!("---------------------------------------");
+
+                continue;
+            }
+
             let rows = match run_msccl_tests(
                 &mpi_hostfile_path,
                 &experiment_descriptor,
                 true, // Why? Well, Liuyao's testo sometimes return a nonzero status code
-                dry_run
+                dry_run,
+                Some(output_path.clone()),
+                Some(stderr_path.clone()),
             ) {
                 Ok(v) => v,
                 Err(e) => {
@@ -435,6 +489,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         buffer_size_factor: experiment_descriptor.buffer_size,
                         overall_result: ResultDescription::Failure,
                     });
+
+                    info!("---------------------------------------");
 
                     // Continue to next experiments
                     continue;

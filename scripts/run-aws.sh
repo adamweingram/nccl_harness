@@ -43,6 +43,7 @@ export CUDA_HOME="/usr/local/cuda"
 export CUDA_PATH="/usr/local/cuda"
 export EFA_PATH="/opt/amazon/efa"
 export OPENMPI_PATH="/opt/amazon/openmpi"
+export MPI_HOME="${OPENMPI_PATH}"
 export AWS_OFI_NCCL_PATH="/mnt/sharedfs/ly-experiments/aws-ofi-nccl-lyd"
 export MSCCL_PATH="/mnt/sharedfs/ly-experiments/msccl/build"
 export NCCL_HOME="/mnt/sharedfs/ly-experiments/msccl/build"
@@ -58,7 +59,7 @@ export LOGS_DIR="/mnt/sharedfs/ly-experiments/experiments_output/raw_logs"
 
 # Update Paths
 export PATH="${MPI_HOME}/bin:${CUDA_HOME}/bin:${PATH}"
-export LD_LIBRARY_PATH="${NCCL_PLUGIN_LIBS}:${NCCL_HOME}/lib:${MPI_HOME}/lib64:${MPI_HOME}/lib64:${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}"
+export LD_LIBRARY_PATH="${AWS_OFI_NCCL_PATH}/lib:${NCCL_HOME}/lib:${MPI_HOME}/lib64:${MPI_HOME}/lib64:${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}"
 
 # Create logs directory
 mkdir -p "${EXPERIMENTS_OUTPUT_DIR}"

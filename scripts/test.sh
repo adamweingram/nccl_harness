@@ -13,9 +13,9 @@ export OPENMPI_PATH="/opt/amazon/openmpi"
 export MSCCL_PATH="/home/ec2-user/deps/msccl/build"
 export NCCL_HOME="/home/ec2-user/deps/msccl/build"
 export NCCL_TESTS_HOME="/home/ec2-user/deps/nccl-tests-lyd/build"
-export MSCCL_XMLS="/home/ec2-user/deps/msccl-tools-lyd/examples/xml/xml_lyd/aws-test/8nic/16gpus"
+export MSCCL_XMLS="/home/Adam/Projects/NCCL-Harness/nccl-experiments/nccl_harness/msccl_tools_lyd/examples/xml/xml_lyd/aws-test/8nic/64gpus"
 export MPI_HOSTFILE="/home/ec2-user/hostfile"
-export NUM_NODES=2
+export NUM_NODES=8
 export GPUS_PER_NODE=8
 export EXPERIMENTS_OUTPUT_DIR="/home/ec2-user/experiments_output"
 

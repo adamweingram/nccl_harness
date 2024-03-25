@@ -340,6 +340,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         openmpi_path: openmpi_path.clone(),
                                         msccl_path: msccl_path.clone(),
 
+                                        // Exe params
+                                        executable: nccl_test_executable.clone(),
+
                                         // MSCCL params
                                         algorithm: comm_algorithm.to_string(),
                                         ms_xml_file: xml_file,
@@ -463,7 +466,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             let rows = match run_msccl_tests(
-                &mpi_hostfile_path,
+                &experiment_descriptor.executable,
                 &experiment_descriptor,
                 true, // Why? Well, Liuyao's testo sometimes return a nonzero status code
                 dry_run,

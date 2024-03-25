@@ -40,6 +40,9 @@ pub struct MscclExperimentParams {
     pub openmpi_path: String,
     pub msccl_path: String,
 
+    // Exe params
+    pub executable: PathBuf,
+
     // MSCCL Params
     pub algorithm: String,
     pub ms_xml_file: PathBuf,

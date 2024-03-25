@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::{fmt, path::{Path, PathBuf}};
 use termion::color;
 
 /// Struct to describe a table row from the NCCL output
@@ -48,6 +48,7 @@ pub struct MscclExperimentParams {
     pub gpu_as_node: bool,
     pub num_nodes: u64,
     pub total_gpus: u64,
+    pub buffer_size: u64,
 
     // MPI Params
     pub mpi_hostfile_path: PathBuf,
@@ -68,6 +69,39 @@ pub struct MscclExperimentParams {
     // NCCL Env Params
     pub nccl_debug_level: String,
     pub nccl_algo: String,
+}
+
+/// Describes the result of an experiment
+#[derive(Debug, Clone)]
+pub enum ResultDescription {
+    Success,
+    PartialFailure,
+    Failure,
+}
+
+impl fmt::Display for ResultDescription {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ResultDescription::Success => write!(f, "Success"),
+            ResultDescription::PartialFailure => write!(f, "Partial Failure"),
+            ResultDescription::Failure => write!(f, "Failure"),
+        }
+    }
+}
+
+/// Struct the basic params and results of an experiment
+#[derive(Debug, Clone)]
+pub struct ManifestEntry {
+    pub collective: String,
+    pub op: String,
+    pub dtype: String,
+    pub algorithm: String,
+    pub num_channels: u64,
+    pub num_chunks: u64,
+    pub num_gpus: u64,
+    pub buffer_size_factor: u64,
+
+    pub overall_result: ResultDescription,
 }
 
 /// Get the name of the NCCL-tests executable that corresponds to the given collective name.
@@ -155,6 +189,41 @@ pub fn pretty_print_configs(configs: &Vec<MscclExperimentParams>, color: bool) {
             println!("|----------------------------+----------+---------------+---------------------------------------+--------------+--------------|");
         }
     }
+}
+
+/// Pretty print the given vector of MSCCL experiment results as a table
+/// 
+/// # Arguments
+/// * `entries` - A vector of MSCCL experiment results to pretty print
+pub fn pretty_print_result_manifest(entries: &Vec<ManifestEntry>) {
+    let mut table = prettytable::Table::new();
+
+    // Add a title row
+    table.add_row(row!["Collective", "Op", "DType", "Algorithm", "Num Channels", "Num Chunks", "Num GPUs", "Buffer Size Factor", "Overall Result"]);
+
+    // Iterate over entries and add each as a row
+    for entry in entries {
+        let result_pretty = match entry.overall_result {
+            ResultDescription::Success => format!("✅ {}", entry.overall_result),
+            ResultDescription::PartialFailure => format!("🚨 {}", entry.overall_result),
+            ResultDescription::Failure => format!("❌ {}", entry.overall_result),
+        };
+
+        table.add_row(prettytable::Row::new(vec![
+            prettytable::Cell::new(&entry.collective),
+            prettytable::Cell::new(&entry.op),
+            prettytable::Cell::new(&entry.dtype),
+            prettytable::Cell::new(&entry.algorithm),
+            prettytable::Cell::new(&entry.num_channels.to_string()),
+            prettytable::Cell::new(&entry.num_chunks.to_string()),
+            prettytable::Cell::new(&entry.num_gpus.to_string()),
+            prettytable::Cell::new(&entry.buffer_size_factor.to_string()),
+            prettytable::Cell::new(result_pretty.as_str()),
+        ]));
+    }
+
+    // Print the table
+    table.printstd();
 }
 
 /// Give the (probable) name of the XML file for a given set of experiment parameters

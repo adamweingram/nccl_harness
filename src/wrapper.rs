@@ -107,6 +107,9 @@ pub fn run_msccl_tests(
         match line {
             Ok(line) => {
                 debug!("[l]: {}", line);
+
+                // Parse line
+                // TODO: Add function when stable
             }
             Err(e) => {
                 error!("Error getting line from stdout BufReader: {}", e);

@@ -4,9 +4,10 @@ use std::process::Command;
 use regex::Regex;
 use polars::prelude::*;
 use log::{debug, info, warn, error};
+#[macro_use] extern crate prettytable;
 
 mod util;
-use util::{Row, Permutation, MscclExperimentParams, params_to_xml, verify_env, pretty_print_configs, collective_to_test_exe};
+use util::{Row, Permutation, MscclExperimentParams, ManifestEntry, ResultDescription, params_to_xml, verify_env, pretty_print_configs, pretty_print_result_manifest, collective_to_test_exe};
 
 mod parse;
 use parse::{rows_to_df, parse_line};
@@ -20,7 +21,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // CUDA Path
     let cuda_path = match std::env::var("CUDA_HOME") {
-        Ok(v) => v,
+        Ok(v) => {
+            debug!("CUDA_HOME set to: {}", v);
+            v
+        },
         Err(_) => {
             panic!("[ERROR] CUDA_HOME not set!");
         }
@@ -28,7 +32,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // EFA Path
     let efa_path = match std::env::var("EFA_PATH") {
-        Ok(v) => Some(v),
+        Ok(v) => {
+            debug!("EFA_PATH set to: {}", v);
+            Some(v)
+        },
         Err(_) => {
             warn!("EFA_PATH was not set! You will not be able to run tests that use the EFA!");
             None
@@ -37,7 +44,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // AWS OFI NCCL Path
     let aws_ofi_nccl_path = match std::env::var("AWS_OFI_NCCL_PATH") {
-        Ok(v) => Some(v),
+        Ok(v) => {
+            debug!("AWS_OFI_NCCL_PATH set to: {}", v);
+            Some(v)
+        },
         Err(_) => {
             warn!("AWS_OFI_NCCL_PATH was not set! You will not be able to run tests that use the EFA!");
             None
@@ -46,7 +56,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // OpenMPI Path
     let openmpi_path = match std::env::var("OPENMPI_PATH") {
-        Ok(v) => v,
+        Ok(v) => {
+            debug!("OPENMPI_PATH set to: {}", v);
+            v
+        },
         Err(_) => {
             panic!("[ERROR] Envvar OPENMPI_PATH not set!");
         }
@@ -54,7 +67,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // MSCCL Path
     let msccl_path = match std::env::var("MSCCL_PATH") {
-        Ok(v) => v,
+        Ok(v) => {
+            debug!("MSCCL_PATH set to: {}", v);
+            v
+        },
         Err(_) => {
             panic!("[ERROR] Envvar MSCCL_PATH not set!");
         }
@@ -62,7 +78,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // NCCL tests executable binary location
     let nccl_test_bins = match std::env::var("NCCL_TESTS_HOME") {
-        Ok(v) => PathBuf::from(v),
+        Ok(v) => {
+            debug!("NCCL_TESTS_HOME set to: {}", v);
+            PathBuf::from(v)
+        },
         Err(_) => {
             panic!("[ERROR] Envvar NCCL_TESTS_HOME not set!");
         }
@@ -70,14 +89,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // MSCCL XML files location
     let msccl_xmls_directory = match std::env::var("MSCCL_XMLS") {
-        Ok(v) => PathBuf::from(v),
+        Ok(v) => {
+            debug!("MSCCL_XMLS set to: {}", v);
+            PathBuf::from(v)
+        },
         Err(_) => {
             panic!("[ERROR] Envvar MSCCL_XMLS not set!");
         }
     };
 
     // MPI hostfile
-    let mpi_hostfile_path = PathBuf::from(std::env::var("MPI_HOSTFILE").unwrap());
+    let mpi_hostfile_path = match std::env::var("MPI_HOSTFILE") {
+        Ok(v) => {
+            debug!("MPI_HOSTFILE set to: {}", v);
+            PathBuf::from(v)
+        },
+        Err(_) => {
+            panic!("[ERROR] Envvar MPI_HOSTFILE not set!");
+        }
+    
+    };
 
     #[cfg(not(feature = "no_check_paths"))]
     if !mpi_hostfile_path.exists() {
@@ -89,7 +120,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Number of Nodes
     let num_nodes = match std::env::var("NUM_NODES") {
-        Ok(v) => v.parse::<u64>().unwrap(),
+        Ok(v) => {
+            debug!("NUM_NODES set to: {}", v);
+            v.parse::<u64>().unwrap()
+        },
         Err(_) => {
             panic!("[ERROR] Envvar NUM_NODES not set!");
         }
@@ -97,7 +131,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // GPUs per Node
     let gpus_per_node = match std::env::var("GPUS_PER_NODE") {
-        Ok(v) => v.parse::<u64>().unwrap(),
+        Ok(v) => {
+            debug!("GPUS_PER_NODE set to: {}", v);
+            v.parse::<u64>().unwrap()
+        },
         Err(_) => {
             panic!("[ERROR] Envvar GPUS_PER_NODE not set!");
         }
@@ -181,13 +218,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // "binomial-tree",
         // "recursive-doubling",
         // "recursive-halving-doubling",
-        "ring",
+        // "ring",
         // "trinomial-tree"
     ];
     let msccl_potential_channels = [  // NOTE: HANDLED IN THE PERMUTATION GENERATOR BECAUSE THERE ARE SPECIAL CASES!
-        1,
-        2,
         4,
+        8,
+        12,
     ];
     let msccl_potential_chunks = [  // NOTE: HANDLED IN THE PERMUTATION GENERATOR BECAUSE THERE ARE SPECIAL CASES!
         1,
@@ -196,9 +233,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         64,
         256
     ];
-    let buffer_sizes = [1u64, 2, 4];
-    let message_size_range = ("64K", "256M"); // We use a range for all experiments
-    let gpus_as_nodes = [true, false];
+    let buffer_sizes = [
+        1u64, 
+        2, 
+        4
+    ];
+    let message_size_range = ("96K", "348M"); // We use a range for all experiments
+    let gpus_as_nodes = [
+        // true, 
+        false
+    ];
 
     let nccl_debug_level = "INFO"; // Use `TRACE` for replayable trace information on every call
 
@@ -254,9 +298,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     // Verify that the XML file exists
                                     // Note: We want to fail early if the XML file is not found rather than failing mid-way through
                                     //       running the experiments.
-                                    #[cfg(not(feature = "no_check_paths"))]
+                                    
                                     if !xml_file.exists() {
-                                        panic!("[ERROR] During permutation generation, XML file not found at: {}. Quitting.", xml_file.to_str().unwrap());
+                                        #[cfg(feature = "no_check_paths")]
+                                        warn!("During permutation generation, XML file not found at: {}. Continuing because 'no_check_paths' cfg is set", xml_file.to_str().unwrap());
+
+                                        #[cfg(not(feature = "no_check_paths"))]
+                                        panic!("During permutation generation, XML file not found at: {}. Quitting.", xml_file.to_str().unwrap());
+                                    } else {
+                                        debug!("Found XML file at: {}", xml_file.to_str().unwrap());
                                     }
 
                                     // Create a full set of experiment parameters for this permutation
@@ -276,6 +326,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         gpu_as_node,
                                         num_nodes,
                                         total_gpus: num_gpus,
+                                        buffer_size,
 
                                         // MPI Params
                                         mpi_hostfile_path: mpi_hostfile_path.clone(),
@@ -326,6 +377,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Pretty-print the permutations
     pretty_print_configs(&experiment_descriptors, false);
 
+    // Create the record-keeping manifest
+    let mut manifest_collection = Vec::new();
+
     // ACTUALLY run experiments by iterating over the list of permutations
     let total_experiments = experiment_descriptors.len() * num_repetitions;
     for (progress, experiment_descriptor) in experiment_descriptors.iter().enumerate() {
@@ -336,7 +390,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // info!("Running collective {} (Op: {}) with data type: {}, comm algorithm: {}, MSCCL channel: {}, MSCCL chunk: {} ({} of {})",
             //     collective_exe, reduction_op, data_type, comm_algorithm, msccl_channel, msccl_chunk, i + 1, num_repetitions);
             info!(
-                "### Running experiment [ # nodes: {} | # GPUs: {} | collective: {} | op: {} | dtype: {} | algorithm: {} | channels: {} | chunks: {} | GPU as Node: {:#?} | experiment {} of {} ] ###",
+                "### Running experiment [ # nodes: {} | # GPUs: {} | collective: {} | op: {} | dtype: {} | algorithm: {} | channels: {} | chunks: {} | buffer size: {} | GPU as Node: {:#?} | experiment {} of {} ] ###",
                 experiment_descriptor.num_nodes,
                 experiment_descriptor.total_gpus,
                 experiment_descriptor.nc_collective,
@@ -345,6 +399,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 experiment_descriptor.algorithm,
                 experiment_descriptor.ms_channels,
                 experiment_descriptor.ms_chunks,
+                experiment_descriptor.buffer_size,
                 experiment_descriptor.gpu_as_node,
                 i + 1,
                 num_repetitions
@@ -368,6 +423,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         e
                     );
 
+                    // Update manifest
+                    manifest_collection.push(ManifestEntry {
+                        collective: experiment_descriptor.nc_collective.clone(),
+                        op: experiment_descriptor.nc_op.clone(),
+                        dtype: experiment_descriptor.nc_dtype.clone(),
+                        algorithm: experiment_descriptor.algorithm.clone(),
+                        num_channels: experiment_descriptor.ms_channels,
+                        num_chunks: experiment_descriptor.ms_chunks,
+                        num_gpus: experiment_descriptor.total_gpus,
+                        buffer_size_factor: experiment_descriptor.buffer_size,
+                        overall_result: ResultDescription::Failure,
+                    });
+
                     // Continue to next experiments
                     continue;
                 }
@@ -384,10 +452,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             );
 
+            // Update manifest
+            manifest_collection.push(ManifestEntry {
+                collective: experiment_descriptor.nc_collective.clone(),
+                op: experiment_descriptor.nc_op.clone(),
+                dtype: experiment_descriptor.nc_dtype.clone(),
+                algorithm: experiment_descriptor.algorithm.clone(),
+                num_channels: experiment_descriptor.ms_channels,
+                num_chunks: experiment_descriptor.ms_chunks,
+                num_gpus: experiment_descriptor.total_gpus,
+                buffer_size_factor: experiment_descriptor.buffer_size,
+                overall_result: ResultDescription::Success,
+            });
+
             // Print line separator
             info!("---------------------------------------");
         }
     }
+
+    // Pretty Print the Manifest
+    println!("\n\n\n--- 📋📋📋 EXPERIMENT RESULTS 📋📋📋 ---\n");
+    pretty_print_result_manifest(&manifest_collection);
 
     Ok(())
 }

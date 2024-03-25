@@ -64,6 +64,10 @@ export LD_LIBRARY_PATH="${NCCL_PLUGIN_LIBS}:${NCCL_HOME}/lib:${MPI_HOME}/lib64:$
 mkdir -p "${EXPERIMENTS_OUTPUT_DIR}"
 mkdir -p "${LOGS_DIR}"
 
+# Rust Environment
+export RUST_BACKTRACE=1
+export RUST_LOG=TRACE
+
 # Print commands
 set -x
 

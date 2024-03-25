@@ -17,13 +17,16 @@ export MSCCL_XMLS="/home/Adam/Projects/NCCL-Harness/nccl-experiments/nccl_harnes
 export MPI_HOSTFILE="/home/ec2-user/hostfile"
 export NUM_NODES=8
 export GPUS_PER_NODE=8
-export EXPERIMENTS_OUTPUT_DIR="/home/ec2-user/experiments_output"
+export EXPERIMENTS_OUTPUT_DIR="./logs/outputs"
 
 # Modified here because we'll actually use the logs dir in our test
 export LOGS_DIR="$(pwd)/logs"
 
 # PERFORM A DRY RUN FOR TESTING
 export DRY_RUN=TRUE
+
+# Choose whether to skip completed experiments
+export SKIP_FINISHED=TRUE
 
 # ./target/release/test_ideas
 cargo build --features no_check_paths

@@ -26,7 +26,7 @@ export LOGS_DIR="$(pwd)/logs"
 export DRY_RUN=TRUE
 
 # Choose whether to skip completed experiments
-export SKIP_FINISHED=TRUE
+export SKIP_FINISHED=FALSE
 
 # ./target/release/test_ideas
 cargo build --features no_check_paths

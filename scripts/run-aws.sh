@@ -102,6 +102,10 @@ if [ ! -d "${MSCCL_XMLS}" ]; then
     echo "MSCCL_XMLS does not exist: ${MSCCL_XMLS}"
     exit 1
 fi
+if [ ! -d "${AWS_OFI_NCCL_PATH}" ]; then
+    echo "AWS_OFI_NCCL_PATH does not exist: ${AWS_OFI_NCCL_PATH}"
+    exit 1
+fi
 
 
 

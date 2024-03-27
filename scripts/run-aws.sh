@@ -66,6 +66,7 @@ export MPI_HOME="${OPENMPI_PATH}"
 export AWS_OFI_NCCL_PATH="/mnt/sharedfs/ly-experiments/aws-ofi-nccl-lyd"
 export MSCCL_PATH="/mnt/sharedfs/ly-experiments/msccl/build"
 export NCCL_HOME="/mnt/sharedfs/ly-experiments/msccl/build"
+export NCCL_PATH="${NCCL_HOME}"
 export NCCL_TESTS_HOME="/mnt/sharedfs/ly-experiments/nccl-tests-lyd/build"
 export MSCCL_XMLS="/mnt/sharedfs/ly-experiments/msccl-tools-lyd/examples/xml/xml_lyd/aws-test/32nic/32gpus"
 

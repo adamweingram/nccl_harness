@@ -67,14 +67,31 @@ export AWS_OFI_NCCL_PATH="/mnt/sharedfs/ly-experiments/aws-ofi-nccl-lyd"
 export MSCCL_PATH="/mnt/sharedfs/ly-experiments/msccl/build"
 export NCCL_HOME="/mnt/sharedfs/ly-experiments/msccl/build"
 export NCCL_TESTS_HOME="/mnt/sharedfs/ly-experiments/nccl-tests-lyd/build"
-export MSCCL_XMLS="/mnt/sharedfs/ly-experiments/msccl-tools-lyd/examples/xml/xml_lyd/aws-test/8nic/64gpus"
+export MSCCL_XMLS="/mnt/sharedfs/ly-experiments/msccl-tools-lyd/examples/xml/xml_lyd/aws-test/32nic/32gpus"
 
 # Config
 export MPI_HOSTFILE="/home/ec2-user/hostfile"
-export NUM_NODES=8
+export NUM_NODES=4
 export GPUS_PER_NODE=8
 export EXPERIMENTS_OUTPUT_DIR="/mnt/sharedfs/ly-experiments/experiments_output"
 export LOGS_DIR="/mnt/sharedfs/ly-experiments/experiments_output/raw_logs"
+
+# Print experiment information
+echo "#################################################"
+echo "# NCCL/MSCCL Info                               #"
+echo "#################################################"
+echo "NCCL Path: ${NCCL_PATH}"
+echo "NCCL Commit: $(git -C ${NCCL_PATH} git rev-parse --verify HEAD)"
+echo "MSCCL Path: ${MSCCL_PATH}"
+echo "MSCCL Commit: $(git -C ${MSCCL_PATH} git rev-parse --verify HEAD)"
+
+echo "#################################################"
+echo "# MSCCL Tools/XMLs Info                         #"
+echo "#################################################"
+echo "MSCCL XMLs Path: ${MSCCL_XMLS}"
+echo "MSCCL XMLs Commit: $(git -C ${MSCCL_XMLS} git rev-parse --verify HEAD)"
+
+echo "#################################################"
 
 # Update Paths
 export PATH="${MPI_HOME}/bin:${CUDA_HOME}/bin:${PATH}"

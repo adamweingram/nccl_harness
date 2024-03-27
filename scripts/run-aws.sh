@@ -3,10 +3,27 @@
 # Set up script
 set -u -o pipefail
 
+set +e # Don't fail on error for the info-gathering section
+
 echo "#################################################"
 echo "# Environment Variables                         #"
 echo "#################################################"
 printenv
+
+echo "#################################################"
+echo "# CPU Information                               #"
+echo "#################################################"
+echo "lscpu: -----------------------------------------"
+lscpu
+
+echo "numastat: ---------------------------------------"
+numastat
+
+echo "numactl --hardware: -----------------------------"
+numactl --hardware
+
+echo "cat /proc/cpuinfo: ------------------------------"
+cat /proc/cpuinfo
 
 echo "#################################################"
 echo "# PCIe Information                              #"
@@ -16,9 +33,11 @@ lspci -tvv
 echo "#################################################"
 echo "# GPU Information                               #"
 echo "#################################################"
-
-# Print info
+echo "nvidia-smi topo -m: -----------------------------"
 nvidia-smi topo -m
+
+echo "nvidia-smi -q -d CLOCK (clock speeds): ----------"
+nvidia-smi -q -d CLOCK
 
 echo "#################################################"
 echo "# Network Information                           #"
@@ -35,7 +54,7 @@ fi_info -p efa -t FI_EP_RDM
 
 echo "#################################################"
 
-# Fail on error
+# Fail on error for actual experiments
 set -e
 
 # Environment
@@ -47,8 +66,8 @@ export MPI_HOME="${OPENMPI_PATH}"
 export AWS_OFI_NCCL_PATH="/mnt/sharedfs/ly-experiments/aws-ofi-nccl-lyd"
 export MSCCL_PATH="/mnt/sharedfs/ly-experiments/msccl/build"
 export NCCL_HOME="/mnt/sharedfs/ly-experiments/msccl/build"
-export NCCL_TESTS_HOME="/mnt/sharedfs/ly-experiments/msccl-test/build"
-export MSCCL_XMLS="/mnt/sharedfs/ly-experiments/msccl_tools_lyd/examples/xml/xml_lyd/aws-test/8nic/64gpus"
+export NCCL_TESTS_HOME="/mnt/sharedfs/ly-experiments/nccl-tests-lyd/build"
+export MSCCL_XMLS="/mnt/sharedfs/ly-experiments/msccl-tools-lyd/examples/xml/xml_lyd/aws-test/8nic/64gpus"
 
 # Config
 export MPI_HOSTFILE="/home/ec2-user/hostfile"

@@ -64,8 +64,8 @@ export EFA_PATH="/opt/amazon/efa"
 export OPENMPI_PATH="/opt/amazon/openmpi"
 export MPI_HOME="${OPENMPI_PATH}"
 export AWS_OFI_NCCL_PATH="/mnt/sharedfs/ly-experiments/aws-ofi-nccl-lyd"
-export MSCCL_PATH="/mnt/sharedfs/ly-experiments/msccl/build"
-export NCCL_HOME="/mnt/sharedfs/ly-experiments/msccl/build"
+export MSCCL_PATH="/mnt/sharedfs/ly-experiments/msccl-lyd/build"
+export NCCL_HOME="/mnt/sharedfs/ly-experiments/msccl-lyd/build"
 export NCCL_PATH="${NCCL_HOME}"
 export NCCL_TESTS_HOME="/mnt/sharedfs/ly-experiments/nccl-tests-lyd/build"
 export MSCCL_XMLS="/mnt/sharedfs/ly-experiments/msccl-tools-lyd/examples/xml/xml_lyd/aws-test/32nic/32gpus"
@@ -76,6 +76,34 @@ export NUM_NODES=4
 export GPUS_PER_NODE=8
 export EXPERIMENTS_OUTPUT_DIR="/mnt/sharedfs/ly-experiments/experiments_output"
 export LOGS_DIR="/mnt/sharedfs/ly-experiments/experiments_output/raw_logs"
+
+# Verify that the directories exist
+if [ ! -d "${CUDA_HOME}" ]; then
+    echo "CUDA_HOME does not exist: ${CUDA_HOME}"
+    exit 1
+fi
+if [ ! -d "${EFA_PATH}" ]; then
+    echo "MSCCL_PATH does not exist: ${EFA_PATH}"
+    exit 1
+fi
+if [ ! -d "${OPENMPI_PATH}" ]; then
+    echo "OPENMPI_PATH does not exist: ${OPENMPI_PATH}"
+    exit 1
+fi
+if [ ! -d "${MSCCL_PATH}" ]; then
+    echo "MSCCL_PATH does not exist: ${MSCCL_PATH}"
+    exit 1
+fi
+if [ ! -d "${NCCL_TESTS_HOME}" ]; then
+    echo "NCCL_TESTS_HOME does not exist: ${NCCL_TESTS_HOME}"
+    exit 1
+fi
+if [ ! -d "${MSCCL_XMLS}" ]; then
+    echo "MSCCL_XMLS does not exist: ${MSCCL_XMLS}"
+    exit 1
+fi
+
+
 
 # Print experiment information
 echo "#################################################"

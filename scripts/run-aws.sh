@@ -110,15 +110,15 @@ echo "#################################################"
 echo "# NCCL/MSCCL Info                               #"
 echo "#################################################"
 echo "NCCL Path: ${NCCL_PATH}"
-echo "NCCL Commit: $(git -C ${NCCL_PATH} git rev-parse --verify HEAD)"
+echo "NCCL Commit: $(git -C ${NCCL_PATH} rev-parse --verify HEAD)"
 echo "MSCCL Path: ${MSCCL_PATH}"
-echo "MSCCL Commit: $(git -C ${MSCCL_PATH} git rev-parse --verify HEAD)"
+echo "MSCCL Commit: $(git -C ${MSCCL_PATH} rev-parse --verify HEAD)"
 
 echo "#################################################"
 echo "# MSCCL Tools/XMLs Info                         #"
 echo "#################################################"
 echo "MSCCL XMLs Path: ${MSCCL_XMLS}"
-echo "MSCCL XMLs Commit: $(git -C ${MSCCL_XMLS} git rev-parse --verify HEAD)"
+echo "MSCCL XMLs Commit: $(git -C ${MSCCL_XMLS} rev-parse --verify HEAD)"
 
 echo "#################################################"
 

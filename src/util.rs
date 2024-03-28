@@ -125,8 +125,8 @@ pub fn exp_params_to_output_filename(params: &MscclExperimentParams, iteration: 
         params.ms_chunks,
         params.buffer_size,
         if params.gpu_as_node { 1 } else { 0 },
+        iteration,
         extension,
-        iteration
     ))
 }
 

@@ -81,6 +81,7 @@ pub enum ResultDescription {
     PartialFailure,
     Failure,
     Skipped,
+    Blacklisted,
 }
 
 impl fmt::Display for ResultDescription {
@@ -90,6 +91,7 @@ impl fmt::Display for ResultDescription {
             ResultDescription::PartialFailure => write!(f, "Partial Failure"),
             ResultDescription::Failure => write!(f, "Failure"),
             ResultDescription::Skipped => write!(f, "Skipped"),
+            ResultDescription::Blacklisted => write!(f, "Blacklisted"),
         }
     }
 }
@@ -228,9 +230,10 @@ pub fn pretty_print_result_manifest(entries: &Vec<ManifestEntry>) {
     for entry in entries {
         let result_pretty = match entry.overall_result {
             ResultDescription::Success => format!("✅ {}", entry.overall_result),
-            ResultDescription::PartialFailure => format!("🚨 {}", entry.overall_result),
+            ResultDescription::PartialFailure => format!("⛓️‍💥 {}", entry.overall_result),
             ResultDescription::Failure => format!("❌ {}", entry.overall_result),
             ResultDescription::Skipped => format!("⏭️ {}", entry.overall_result),
+            ResultDescription::Blacklisted => format!("💔 {}", entry.overall_result),
         };
 
         table.add_row(prettytable::Row::new(vec![

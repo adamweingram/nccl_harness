@@ -236,8 +236,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // "int8",
     ];
     let comm_algorithms = [
-        "binary-tree",
-        // "binomial-tree",
+        // "binary-tree",
+        "binomial-tree",
         // "recursive-doubling",
         // "recursive-halving-doubling",
         // "ring",
@@ -264,6 +264,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let gpus_as_nodes = [
         // true, 
         false
+    ];
+
+    // Blacklist certain XML files that hang or otherwise misbehave
+    // let blacklist: [&str; 0] = [];  // Use this if you want the blacklist to contain nothing
+    let blacklist = [
+        // PathBuf::from("allreduce_binary-tree_node4_gpu32_mcl12_mck64_gan0.xml"),
+        PathBuf::from("allreduce_binomial-tree_node8_gpu64_mcl4_mck1_gan0.xml"),
     ];
 
     let nccl_debug_level = "INFO"; // Use `TRACE` for replayable trace information on every call
@@ -442,6 +449,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let stderr_path = experiments_output_dir.clone().join(
                 exp_params_to_output_filename(&experiment_descriptor, "stderr")
             );
+
+            // Skip blacklisted XML files
+            for blacklisted in blacklist.iter() {
+                let full_blacklisted_path = msccl_xmls_directory.join(blacklisted);
+
+                if !full_blacklisted_path.exists() {
+                    warn!("Blacklisted XML file not found at: {}. Skipping, but this is probably a bug in nccl_harness!", 
+                        full_blacklisted_path.to_str().unwrap());
+                }
+
+                if experiment_descriptor.ms_xml_file == full_blacklisted_path {
+                    info!("Skipping experiment because XML file is blacklisted: {:?}", experiment_descriptor.ms_xml_file);
+
+                    // Update manifest
+                    manifest_collection.push(ManifestEntry {
+                        collective: experiment_descriptor.nc_collective.clone(),
+                        op: experiment_descriptor.nc_op.clone(),
+                        dtype: experiment_descriptor.nc_dtype.clone(),
+                        algorithm: experiment_descriptor.algorithm.clone(),
+                        num_channels: experiment_descriptor.ms_channels,
+                        num_chunks: experiment_descriptor.ms_chunks,
+                        num_gpus: experiment_descriptor.total_gpus,
+                        buffer_size_factor: experiment_descriptor.buffer_size,
+                        overall_result: ResultDescription::Blacklisted,
+                    });
+
+                    info!("---------------------------------------");
+
+                    continue;
+                }
+            }
 
             // Skip if already completed and skip envvar is set
             if skip_finished && output_path.exists() {

@@ -113,10 +113,10 @@ pub struct ManifestEntry {
 
 /// Get the name of the output file for a set of given MSCCL experiment parameters
 #[inline(always)]
-pub fn exp_params_to_output_filename(params: &MscclExperimentParams, extension: &str) -> PathBuf {
-    // (collective)_(algorithm)_node(# nodes)_gpu(# gpus)_mcl(# channels)_mck(# chunks)_buf(scl. fac.)_gan(1|0).(extension)
+pub fn exp_params_to_output_filename(params: &MscclExperimentParams, iteration: u64, extension: &str) -> PathBuf {
+    // (collective)_(algorithm)_node(# nodes)_gpu(# gpus)_mcl(# channels)_mck(# chunks)_buf(scl. fac.)_gan(1|0)_i(iter id).(extension)
     PathBuf::from(format!(
-        "{}_{}_node{}_gpu{}_mcl{}_mck{}_buf{}_gan{}.{}",
+        "{}_{}_node{}_gpu{}_mcl{}_mck{}_buf{}_gan{}_i{}.{}",
         params.nc_collective,
         params.algorithm,
         params.num_nodes,
@@ -125,7 +125,8 @@ pub fn exp_params_to_output_filename(params: &MscclExperimentParams, extension: 
         params.ms_chunks,
         params.buffer_size,
         if params.gpu_as_node { 1 } else { 0 },
-        extension
+        extension,
+        iteration
     ))
 }
 

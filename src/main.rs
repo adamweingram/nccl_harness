@@ -261,8 +261,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // IMPORTANT: Buffer size must be modified by changing NCCL code at the moment! Therefore, we won't use
     //            the harness to select buffer sizes. We will run the harness manually three times.
     let buffer_sizes = [
-        1u64, 
-        // 2, 
+        // 1u64, 
+        2u64, 
         // 4
     ];
     let message_size_range = ("64K", "2G"); // We use a range for all experiments
@@ -449,10 +449,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // Get the output file paths
             let output_path = experiments_output_dir.clone().join(
-                exp_params_to_output_filename(&experiment_descriptor, "log"),
+                exp_params_to_output_filename(&experiment_descriptor, i as u64, "log"),
             );
             let stderr_path = experiments_output_dir.clone().join(
-                exp_params_to_output_filename(&experiment_descriptor, "stderr")
+                exp_params_to_output_filename(&experiment_descriptor, i as u64, "stderr")
             );
 
             // Skip blacklisted XML files

@@ -243,18 +243,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "ring",
         // "trinomial-tree"
     ];
-    let msccl_potential_channels = [  // NOTE: HANDLED IN THE PERMUTATION GENERATOR BECAUSE THERE ARE SPECIAL CASES!
-        4,
-        8,
-        16,
-    ];
-    let msccl_potential_chunks = [  // NOTE: HANDLED IN THE PERMUTATION GENERATOR BECAUSE THERE ARE SPECIAL CASES!
-        1,
-        4,
-        16,
-        64,
-        // 256
-    ];
+
+    // Note: These will be determined by the special case generator in the loop (at Ly's request)
+    // let msccl_potential_channels = [  // NOTE: HANDLED IN THE PERMUTATION GENERATOR BECAUSE THERE ARE SPECIAL CASES!
+    //     4,
+    //     8,
+    //     16,
+    // ];
+    // let msccl_potential_chunks = [  // NOTE: HANDLED IN THE PERMUTATION GENERATOR BECAUSE THERE ARE SPECIAL CASES!
+    //     1,
+    //     4,
+    //     16,
+    //     // 64,
+    //     // 256
+    // ];
 
     // IMPORTANT: Buffer size must be modified by changing NCCL code at the moment! Therefore, we won't use
     //            the harness to select buffer sizes. We will run the harness manually three times.
@@ -296,19 +298,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             for data_type in data_types {
                 for reduction_op in reduction_ops {
                     for comm_algorithm in comm_algorithms {
-                        // // Handle special cases for different communication algorithms
-                        // let (msccl_potential_chunks, msccl_potential_channels) =
-                        //     match comm_algorithm {
-                        //         "binary-tree" => (vec![8u64, 16, 32, 64, 128, 256], vec![1u64, 2]),
-                        //         "binomial-tree" => (vec![8, 16, 32, 64, 128], vec![1, 2]),
-                        //         "recursive-doubling-halving" => (vec![8, 16, 32], vec![1, 2]),
-                        //         "ring" => (vec![1, 2, 4], vec![2, 4, 8]),
-                        //         "double-binary-tree" => (vec![8, 16, 32, 64, 128, 256], vec![1, 2]),
-                        //         "double-binomial-tree" => (vec![8, 16, 32, 64, 128], vec![1, 2]),
-                        //         "trinomial-tree" => (vec![8, 16, 32, 64, 128], vec![1, 2]),
-                        //         "recursive-doubling" => (vec![8, 16, 32], vec![1, 2]),
-                        //         _ => panic!("[ERROR] Unknown comm_algorithm: {}", comm_algorithm),
-                        //     };
+                        // Handle special cases for different communication algorithms
+                        let (msccl_potential_chunks, msccl_potential_channels) =
+                            match comm_algorithm {
+                                "binary-tree" => (vec![1, 2, 4, 8u64, 16, 32], vec![4u64, 8, 16]),
+                                // "binomial-tree" => (vec![8, 16, 32, 64, 128], vec![1, 2]),
+                                // "recursive-doubling-halving" => (vec![8, 16, 32], vec![1, 2]),
+                                "ring" => (vec![1, 2], vec![4, 8, 16]),
+                                // "double-binary-tree" => (vec![8, 16, 32, 64, 128, 256], vec![1, 2]),
+                                // "double-binomial-tree" => (vec![8, 16, 32, 64, 128], vec![1, 2]),
+                                // "trinomial-tree" => (vec![8, 16, 32, 64, 128], vec![1, 2]),
+                                // "recursive-doubling" => (vec![8, 16, 32], vec![1, 2]),
+                                _ => panic!("[ERROR] Unknown comm_algorithm: {}", comm_algorithm),
+                            };
 
                         // Create permutations
                         for msccl_chunks in msccl_potential_chunks.iter() {

@@ -246,7 +246,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let msccl_potential_channels = [  // NOTE: HANDLED IN THE PERMUTATION GENERATOR BECAUSE THERE ARE SPECIAL CASES!
         4,
         8,
-        12,
+        16,
     ];
     let msccl_potential_chunks = [  // NOTE: HANDLED IN THE PERMUTATION GENERATOR BECAUSE THERE ARE SPECIAL CASES!
         1,
@@ -260,7 +260,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         2, 
         4
     ];
-    let message_size_range = ("96K", "348M"); // We use a range for all experiments
+    let message_size_range = ("64K", "2G"); // We use a range for all experiments
     let gpus_as_nodes = [
         // true, 
         false

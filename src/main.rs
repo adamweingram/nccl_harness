@@ -261,9 +261,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // IMPORTANT: Buffer size must be modified by changing NCCL code at the moment! Therefore, we won't use
     //            the harness to select buffer sizes. We will run the harness manually three times.
     let buffer_sizes = [
-        // 1u64, 
+        1u64, 
         // 2u64, 
-        4u64,
+        // 4u64,
     ];
     let message_size_range = ("64K", "2G"); // We use a range for all experiments
     let gpus_as_nodes = [
@@ -272,10 +272,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     // Blacklist certain XML files that hang or otherwise misbehave
-    // let blacklist: [&str; 0] = [];  // Use this if you want the blacklist to contain nothing
-    let blacklist = [
-        PathBuf::from("allreduce_ring_node4_gpu32_mcl4_mck2_gan0.xml"),
-    ];
+    let blacklist: [&str; 0] = [];  // Use this if you want the blacklist to contain nothing
+    // let blacklist = [
+    //     PathBuf::from("allreduce_ring_node4_gpu32_mcl4_mck2_gan0.xml"),
+    //     PathBuf::from("allreduce_ring_node4_gpu32_mcl8_mck2_gan0.xml"),
+    //     PathBuf::from("allreduce_ring_node4_gpu32_mcl16_mck2_gan0.xml"),
+    // ];
 
     let nccl_debug_level = "INFO"; // Use `TRACE` for replayable trace information on every call
 

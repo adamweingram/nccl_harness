@@ -143,7 +143,7 @@ export RUST_LOG=TRACE
 # Note: You can set this to true if you don't want to re-run a bunch of experiments after a hang somewhere. You
 #       will probably want to delete the "half-finished" logfiles first or those experiments will be skipped
 #       as well.
-export SKIP_FINISHED=FALSE
+export SKIP_FINISHED=TRUE
 
 # Print commands
 set -x

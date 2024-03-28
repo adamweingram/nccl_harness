@@ -236,11 +236,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // "int8",
     ];
     let comm_algorithms = [
-        // "binary-tree",
-        "binomial-tree",
+        "binary-tree",
+        // "binomial-tree",
         // "recursive-doubling",
         // "recursive-halving-doubling",
-        // "ring",
+        "ring",
         // "trinomial-tree"
     ];
     let msccl_potential_channels = [  // NOTE: HANDLED IN THE PERMUTATION GENERATOR BECAUSE THERE ARE SPECIAL CASES!

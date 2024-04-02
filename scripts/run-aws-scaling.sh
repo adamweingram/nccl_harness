@@ -150,7 +150,7 @@ export RUST_LOG=TRACE
 #       will probably want to delete the "half-finished" logfiles first or those experiments will be skipped
 #       as well.
 export SKIP_FINISHED=TRUE
-export DRY_RUN=TRUE
+# export DRY_RUN=TRUE
 
 # Print commands
 set -x

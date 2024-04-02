@@ -160,8 +160,6 @@ cargo build --release
 
 # Run experiments
 for num_nodes in "${NUM_NODES_LIST[@]}"; do
-    echo "Running with hostfile: ${hostfile}, num_nodes: ${num_nodes}"
-
     # Set envvars required by the harness
     export MPI_HOSTFILE="${MPI_HOSTFILE_BASE}-${num_nodes}n"
     export NUM_NODES="${num_nodes}"

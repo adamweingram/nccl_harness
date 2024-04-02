@@ -72,7 +72,7 @@ export NCCL_TESTS_HOME="/mnt/sharedfs/ly-experiments/nccl-tests-lyd/build"
 export MSCCL_XMLS="/mnt/sharedfs/ly-experiments/msccl-tools-lyd/examples/xml/xml_lyd/aws-test/32nic"
 
 # Config
-export MPI_HOSTFILES=( "/home/ec2-user/hostfile-2n" "/home/ec2-user/hostfile-4n" "/home/ec2-user/hostfile-8n" )
+export MPI_HOSTFILE_BASE="/home/ec2-user/hostfile"
 export NUM_NODES_LIST=(2 4 8)
 export GPUS_PER_NODE=8
 export EXPERIMENTS_OUTPUT_DIR="/mnt/sharedfs/ly-experiments/experiments_output"
@@ -159,18 +159,16 @@ set -x
 cargo build --release
 
 # Run experiments
-for hostfile in "${MPI_HOSTFILES[@]}"; do
-    for num_nodes in "${NUM_NODES_LIST[@]}"; do
-        echo "Running with hostfile: ${hostfile}, num_nodes: ${num_nodes}"
+for num_nodes in "${NUM_NODES_LIST[@]}"; do
+    echo "Running with hostfile: ${hostfile}, num_nodes: ${num_nodes}"
 
-        # Set envvars required by the harness
-        export MPI_HOSTFILE=${hostfile}
-        export NUM_NODES=${num_nodes}
-        echo "Will use MPI_HOSTFILE=${MPI_HOSTFILE}, NUM_NODES=${NUM_NODES}"
+    # Set envvars required by the harness
+    export MPI_HOSTFILE="${MPI_HOSTFILE_BASE}-${num_nodes}n"
+    export NUM_NODES="${num_nodes}"
+    echo "Will use MPI_HOSTFILE=${MPI_HOSTFILE}, NUM_NODES=${NUM_NODES}"
 
-        # Run the harness
-        ./target/release/nccl_harness 2>&1 | tee "${LOGS_DIR}/nccl_harness-${num_nodes}node.$(date +%Y%m%d%H%M%S).log"
-    done
+    # Run the harness
+    ./target/release/nccl_harness 2>&1 | tee "${LOGS_DIR}/nccl_harness-${num_nodes}node.$(date +%Y%m%d%H%M%S).log"
 done
 
 set +x

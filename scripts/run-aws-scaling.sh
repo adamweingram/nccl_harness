@@ -69,7 +69,7 @@ export MSCCL_PATH="/mnt/sharedfs/ly-experiments/msccl-lyd/build"
 export NCCL_HOME="/mnt/sharedfs/ly-experiments/msccl-lyd/build"
 export NCCL_PATH="${NCCL_HOME}"
 export NCCL_TESTS_HOME="/mnt/sharedfs/ly-experiments/nccl-tests-lyd/build"
-export MSCCL_XMLS="/mnt/sharedfs/ly-experiments/msccl-tools-lyd/examples/xml/xml_lyd/aws-test/32nic/32gpus"
+export MSCCL_XMLS="/mnt/sharedfs/ly-experiments/msccl-tools-lyd/examples/xml/xml_lyd/aws-test/32nic"
 
 # Config
 export MPI_HOSTFILES=( "/home/ec2-user/hostfile-2n" "/home/ec2-user/hostfile-4n" "/home/ec2-user/hostfile-8n" )
@@ -164,7 +164,7 @@ for hostfile in "${MPI_HOSTFILES[@]}"; do
         echo "Running with hostfile: ${hostfile}, num_nodes: ${num_nodes}"
 
         # Set envvars required by the harness
-        export HOSTFILE=${hostfile}
+        export MPI_HOSTFILE=${hostfile}
         export NUM_NODES=${num_nodes}
         echo "Will use MPI_HOSTFILE=${MPI_HOSTFILE}, NUM_NODES=${NUM_NODES}"
 

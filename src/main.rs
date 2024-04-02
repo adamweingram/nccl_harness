@@ -261,8 +261,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // IMPORTANT: Buffer size must be modified by changing NCCL code at the moment! Therefore, we won't use
     //            the harness to select buffer sizes. We will run the harness manually three times.
     let buffer_sizes = [
-        // 1u64, 
-        2u64, 
+        1u64, 
+        // 2u64, 
         // 4u64,
     ];
     let message_size_range = ("64K", "16G"); // We use a range for all experiments
@@ -379,7 +379,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         nc_min_bytes: message_size_range.0.to_string(),
                                         nc_max_bytes: message_size_range.1.to_string(),
                                         nc_step_factor: "2".to_string(),
-                                        nc_num_iters: 100,
+                                        nc_num_iters: 60,
                                         nc_num_warmup_iters: 20,
 
                                         // NCCL Env params

@@ -209,7 +209,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let num_gpus = num_nodes * gpus_per_node;
 
     // Selected
-    let num_repetitions = 2;
+    let num_repetitions = 4;
     let collectives = [
         "all-reduce",
         // "all-gather",

@@ -107,6 +107,12 @@ if [ ! -d "${AWS_OFI_NCCL_PATH}" ]; then
     echo "AWS_OFI_NCCL_PATH does not exist: ${AWS_OFI_NCCL_PATH}"
     exit 1
 fi
+for hostfile in "${MPI_HOSTFILES[@]}"; do
+    if [ ! -f "${hostfile}" ]; then
+        echo "MPI Hostfile does not exist: ${hostfile}"
+        exit 1
+    fi
+done
 
 
 

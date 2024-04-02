@@ -261,11 +261,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // IMPORTANT: Buffer size must be modified by changing NCCL code at the moment! Therefore, we won't use
     //            the harness to select buffer sizes. We will run the harness manually three times.
     let buffer_sizes = [
-        1u64, 
-        // 2u64, 
+        // 1u64, 
+        2u64, 
         // 4u64,
     ];
-    let message_size_range = ("64K", "2G"); // We use a range for all experiments
+    let message_size_range = ("64K", "16G"); // We use a range for all experiments
     let gpus_as_nodes = [
         // true, 
         false
@@ -302,10 +302,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         // Handle special cases for different communication algorithms
                         let (msccl_potential_chunks, msccl_potential_channels) =
                             match comm_algorithm {
-                                "binary-tree" => (vec![1, 2, 4, 8u64, 16, 32], vec![4u64, 8, 16]),
+                                "binary-tree" => (vec![1u64, 2, 4, 8, 16], vec![4u64, 8, 16]),
                                 // "binomial-tree" => (vec![8, 16, 32, 64, 128], vec![1, 2]),
                                 // "recursive-doubling-halving" => (vec![8, 16, 32], vec![1, 2]),
-                                "ring" => (vec![1, 2], vec![4, 8, 16]),
+                                "ring" => (vec![1u64, 2], vec![4u64, 8, 16]),
                                 // "double-binary-tree" => (vec![8, 16, 32, 64, 128, 256], vec![1, 2]),
                                 // "double-binomial-tree" => (vec![8, 16, 32, 64, 128], vec![1, 2]),
                                 // "trinomial-tree" => (vec![8, 16, 32, 64, 128], vec![1, 2]),
